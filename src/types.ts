@@ -1,0 +1,76 @@
+import type { UseBoundStore, StoreApi } from 'zustand';
+import type { PersistOptions } from 'zustand/middleware';
+import type { LogLevel } from './logger';
+import { SyncAction } from './index';
+
+export type SyncedRecord = {
+    id?: any;
+    _localId: string;
+    updated_at: string;
+    deleted?: boolean;
+    [k: string]: any;
+};
+
+export interface ApiFunctions {
+    add: (item: any) => Promise<any | undefined>;
+    update: (id: any, changes: any) => Promise<boolean>;
+    remove: (id: any) => Promise<void>;
+    list: (lastUpdatedAt: Date) => Promise<any[]>;
+    firstLoad: (lastId: any) => Promise<any[]>;
+}
+
+export type AfterRemoteAddCallback = (set: any, get: any, queue: QueueToSyncCallback, stateKey: string, item: SyncedRecord) => void;
+
+export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordDuringUpdateStrategy, item: SyncedRecord, newLocalId?: string) => void;
+
+export type MissingRemoteRecordDuringUpdateStrategy = 'ignore' | 'deleteLocalRecord' | 'insertNewRemoteRecord';
+
+export interface SyncOptions {
+    syncInterval?: number;
+    logger?: any;
+    minLogLevel?: LogLevel;
+    onAfterRemoteAdd?: AfterRemoteAddCallback;
+    missingRemoteRecordDuringUpdateStrategy?: MissingRemoteRecordDuringUpdateStrategy;
+    onMissingRemoteRecordDuringUpdate?: MissingRemoteRecordDuringUpdateCallback;
+}
+
+export type SyncState = {
+    syncState: {
+        status: 'hydrating' | 'syncing' | 'idle';
+        error?: Error;
+        enabled: boolean;
+        firstLoadDone: boolean;
+        pendingChanges: PendingChange[];
+        lastPulled: Record<string, string>;
+    };
+};
+
+export type QueueToSyncCallback = (action: SyncAction, stateKey: string, ...localIds: string[]) => void;
+
+export type SyncedStateCreator<TStore> = (set: any, get: any, queue: QueueToSyncCallback) => TStore;
+
+export interface PendingChange {
+    action: SyncAction;
+    stateKey: string;
+    localId: string;
+    id?: any;
+    version: number;
+}
+
+export type UseStoreWithSync<T> = UseBoundStore<
+    StoreApi<T & SyncState> & {
+        sync: {
+            enable: (e: boolean) => void;
+            startFirstLoad: () => Promise<void>;
+        };
+        persist: {
+            setOptions: (options: Partial<PersistOptions<T, any, any>>) => void;
+            clearStorage: () => void;
+            rehydrate: () => Promise<void> | void;
+            hasHydrated: () => boolean;
+            onHydrate: (fn: (state: T) => void) => () => void;
+            onFinishHydration: (fn: (state: T) => void) => () => void;
+            getOptions: () => Partial<PersistOptions<T, any, any>>;
+        };
+    }
+>;

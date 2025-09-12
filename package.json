@@ -1,0 +1,57 @@
+{
+  "name": "@anfenn/zync",
+  "version": "0.1.13",
+  "private": false,
+  "description": "Sync middleware for zustand",
+  "keywords": [],
+  "license": "MIT",
+  "author": "Adam Fennell",
+  "type": "module",
+  "exports": {
+    "import": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "require": {
+      "types": "./dist/index.d.cts",
+      "default": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "npm run format && npm run lint && tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint . --fix \"src/**/*.{js,jsx,ts,tsx,json}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "size": "pnpm --filter size size",
+    "test": "pnpm --filter tests test",
+    "test:ci": "pnpm --filter tests test:ci"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.21.0",
+    "eslint": "9.35.0",
+    "idb": "8.0.3",
+    "prettier": "3.4.2",
+    "tsup": "8.3.5",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.24.1",
+    "zustand": "5.0.8"
+  },
+  "peerDependencies": {
+    "zustand": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zustand": {
+      "optional": false
+    }
+  },
+  "optionalDependencies": {
+    "idb": "8.0.3"
+  }
+}
