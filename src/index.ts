@@ -86,7 +86,7 @@ export function persistWithSync<TStore extends object>(
         },
         merge: (persisted: any, current: any) => {
             // Here after hydration.
-            // `persisted` is state from storage that's just loaded (possibly ascynchronously e.g. IndexedDB)
+            // `persisted` is state from storage that's just loaded (possibly asynchronously e.g. IndexedDB)
             // `current` is what the user has defined (they may have added or removed state keys)
             // Zync is designed to not be used until hydration is complete, so we don't expect to have to
             // merge user mutated state (i.e. current) into persisted. So we do the Zustand recommended pattern of
@@ -265,7 +265,7 @@ export function persistWithSync<TStore extends object>(
                             queueItem.action = SyncAction.Remove;
                             queueItem.id = item.id;
                         }
-                        logger.debug(`[zync] queueToSync:adjusted v=${queueItem.version} action=${action} localId=${localId}`);
+                        logger.debug(`[zync] queueToSync:adjusted action=${action} localId=${localId} v=${queueItem.version}`);
                     } else {
                         pendingChanges.push({ action, stateKey, localId, id: item.id, version: 1 });
                         logger.debug(`[zync] queueToSync:added action=${action} localId=${localId}`);
