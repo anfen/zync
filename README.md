@@ -16,7 +16,7 @@ Unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 - Client records will have a `_localId` field which is stable and never sent to the server. It is ideal for use as a key in JSX. The provided helper function `nextLocalId()` returns a UUID, but you could use any unique value
 - Server records must have:
     - `id`: Server assigned unique identifier (any datatype)
-    - `updated_at`: Server assigned (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection
+    - `updated_at`: Server assigned **_millisecond_** timestamp (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
     - `deleted`: Boolean, used for soft deletes, to allow other clients to download deleted records to keep their local records in sync
 
 ## Quickstart
