@@ -2,15 +2,7 @@ import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
 import { orderFor, findApi, nextLocalId } from './helpers';
-import type {
-    ApiFunctions,
-    MissingRemoteRecordDuringUpdateStrategy,
-    SyncOptions,
-    SyncState,
-    SyncedStateCreator,
-    PendingChange,
-    UseStoreWithSync,
-} from './types';
+import type { ApiFunctions, SyncOptions, SyncState, SyncedStateCreator, PendingChange, UseStoreWithSync } from './types';
 import { pull } from './pull';
 import { pushOne } from './push';
 
@@ -19,14 +11,20 @@ export { nextLocalId } from './helpers';
 export type { ApiFunctions, UseStoreWithSync, SyncState } from './types';
 
 export enum SyncAction {
-    CreateOrUpdate = 'createOrUpdate',
+    CreateOrUpdate = 'create-or-update',
     Remove = 'remove',
+}
+
+export enum MissingRemoteRecordStrategy {
+    Ignore = 'ignore',
+    DeleteLocalRecord = 'delete-local-record',
+    InsertRemoteRecord = 'insert-remote-record',
 }
 
 const DEFAULT_SYNC_INTERVAL_MILLIS = 5000;
 const DEFAULT_LOGGER: Logger = console;
 const DEFAULT_MIN_LOG_LEVEL: LogLevel = 'debug';
-const DEFAULT_MISSING_REMOTE_RECORD_ON_UPDATE_STRATEGY: MissingRemoteRecordDuringUpdateStrategy = 'ignore';
+const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = MissingRemoteRecordStrategy.Ignore;
 
 export function createWithSync<TStore extends object>(
     stateCreator: SyncedStateCreator<TStore>,
@@ -50,7 +48,7 @@ export function persistWithSync<TStore extends object>(
     syncOptions: SyncOptions = {},
 ) {
     const syncInterval = syncOptions.syncInterval ?? DEFAULT_SYNC_INTERVAL_MILLIS;
-    const missingStrategy = syncOptions.missingRemoteRecordDuringUpdateStrategy ?? DEFAULT_MISSING_REMOTE_RECORD_ON_UPDATE_STRATEGY;
+    const missingStrategy = syncOptions.missingRemoteRecordDuringUpdateStrategy ?? DEFAULT_MISSING_REMOTE_RECORD_STRATEGY;
     const logger = newLogger(syncOptions.logger ?? DEFAULT_LOGGER, syncOptions.minLogLevel ?? DEFAULT_MIN_LOG_LEVEL);
 
     const baseOnRehydrate = persistOptions?.onRehydrateStorage;

@@ -1,7 +1,7 @@
 import type { UseBoundStore, StoreApi } from 'zustand';
 import type { PersistOptions } from 'zustand/middleware';
 import type { LogLevel } from './logger';
-import { SyncAction } from './index';
+import { MissingRemoteRecordStrategy, SyncAction } from './index';
 
 export type SyncedRecord = {
     id?: any;
@@ -21,16 +21,14 @@ export interface ApiFunctions {
 
 export type AfterRemoteAddCallback = (set: any, get: any, queue: QueueToSyncCallback, stateKey: string, item: SyncedRecord) => void;
 
-export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordDuringUpdateStrategy, item: SyncedRecord, newLocalId?: string) => void;
-
-export type MissingRemoteRecordDuringUpdateStrategy = 'ignore' | 'deleteLocalRecord' | 'insertNewRemoteRecord';
+export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordStrategy, item: SyncedRecord, newLocalId?: string) => void;
 
 export interface SyncOptions {
     syncInterval?: number;
     logger?: any;
     minLogLevel?: LogLevel;
     onAfterRemoteAdd?: AfterRemoteAddCallback;
-    missingRemoteRecordDuringUpdateStrategy?: MissingRemoteRecordDuringUpdateStrategy;
+    missingRemoteRecordDuringUpdateStrategy?: MissingRemoteRecordStrategy;
     onMissingRemoteRecordDuringUpdate?: MissingRemoteRecordDuringUpdateCallback;
 }
 

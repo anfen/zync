@@ -1,6 +1,6 @@
 import { removeFromPendingChanges, omitSyncFields, samePendingVersion } from './helpers';
-import { SyncAction } from './index';
-import type { ApiFunctions } from './types';
+import { MissingRemoteRecordStrategy, SyncAction } from './index';
+import type { AfterRemoteAddCallback, ApiFunctions, MissingRemoteRecordDuringUpdateCallback } from './types';
 
 const SYNC_FIELDS = ['id', '_localId', 'updated_at', 'deleted'] as const;
 
@@ -11,9 +11,9 @@ export async function pushOne(
     api: ApiFunctions,
     logger: any,
     queueToSync: any,
-    missingStrategy: string,
-    onMissingRemoteRecordDuringUpdate?: any,
-    onAfterRemoteAdd?: any,
+    missingStrategy: MissingRemoteRecordStrategy,
+    onMissingRemoteRecordDuringUpdate?: MissingRemoteRecordDuringUpdateCallback,
+    onAfterRemoteAdd?: AfterRemoteAddCallback,
 ) {
     logger.debug(`[zync] push:attempt action=${change.action} stateKey=${change.stateKey} localId=${change.localId}`);
 
@@ -61,13 +61,13 @@ export async function pushOne(
                     });
 
                     switch (missingStrategy) {
-                        case 'deleteLocalRecord':
+                        case MissingRemoteRecordStrategy.DeleteLocalRecord:
                             set((s: any) => ({
                                 [stateKey]: (s[stateKey] || []).filter((i: any) => i._localId !== localId),
                             }));
                             break;
 
-                        case 'insertNewRemoteRecord': {
+                        case MissingRemoteRecordStrategy.InsertRemoteRecord: {
                             omittedItem._localId = crypto.randomUUID();
                             omittedItem.updated_at = new Date().toISOString();
 
