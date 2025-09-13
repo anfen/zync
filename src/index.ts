@@ -256,8 +256,10 @@ export function persistWithSync<TStore extends object>(
                         if (queueItem.action === SyncAction.CreateOrUpdate && action === SyncAction.Remove && item.id) {
                             queueItem.action = SyncAction.Remove;
                             queueItem.id = item.id;
+                            logger.debug(`[zync] queueToSync:changed-to-remove action=${action} localId=${localId} v=${queueItem.version}`);
+                        } else {
+                            logger.debug(`[zync] queueToSync:re-queued action=${action} localId=${localId} v=${queueItem.version}`);
                         }
-                        logger.debug(`[zync] queueToSync:adjusted action=${action} localId=${localId} v=${queueItem.version}`);
                     } else {
                         pendingChanges.push({ action, stateKey, localId, id: item.id, version: 1 });
                         logger.debug(`[zync] queueToSync:added action=${action} localId=${localId}`);

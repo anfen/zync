@@ -22,6 +22,12 @@ export async function pushOne(
 
     switch (action) {
         case SyncAction.Remove:
+            if (!id) {
+                logger.warn(`[zync] push:remove:no-id ${stateKey} ${localId}`);
+                removeFromPendingChanges(set, localId, stateKey);
+                return;
+            }
+
             await api.remove(id);
             logger.debug(`[zync] push:remove:success ${stateKey} ${localId} ${id}`);
             removeFromPendingChanges(set, localId, stateKey);
