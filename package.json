@@ -1,6 +1,6 @@
 {
   "name": "@anfenn/zync",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": false,
   "description": "Sync middleware for zustand",
   "keywords": [],

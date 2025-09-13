@@ -2,7 +2,7 @@ import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
 import { orderFor, findApi, nextLocalId } from './helpers';
-import type { ApiFunctions, SyncOptions, SyncState, SyncedStateCreator, PendingChange, UseStoreWithSync } from './types';
+import type { ApiFunctions, SyncOptions, SyncState, SyncedStateCreator, PendingChange, UseStoreWithSync, MissingRemoteRecordStrategy } from './types';
 import { pull } from './pull';
 import { pushOne } from './push';
 
@@ -15,16 +15,10 @@ export enum SyncAction {
     Remove = 'remove',
 }
 
-export enum MissingRemoteRecordStrategy {
-    Ignore = 'ignore',
-    DeleteLocalRecord = 'delete-local-record',
-    InsertRemoteRecord = 'insert-remote-record',
-}
-
 const DEFAULT_SYNC_INTERVAL_MILLIS = 5000;
 const DEFAULT_LOGGER: Logger = console;
 const DEFAULT_MIN_LOG_LEVEL: LogLevel = 'debug';
-const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = MissingRemoteRecordStrategy.Ignore;
+const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = 'ignore';
 
 export function createWithSync<TStore extends object>(
     stateCreator: SyncedStateCreator<TStore>,

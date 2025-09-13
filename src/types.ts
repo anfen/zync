@@ -1,7 +1,7 @@
 import type { UseBoundStore, StoreApi } from 'zustand';
 import type { PersistOptions } from 'zustand/middleware';
 import type { LogLevel } from './logger';
-import { MissingRemoteRecordStrategy, SyncAction } from './index';
+import { SyncAction } from './index';
 
 export type SyncedRecord = {
     id?: any;
@@ -18,6 +18,8 @@ export interface ApiFunctions {
     list: (lastUpdatedAt: Date) => Promise<any[]>;
     firstLoad: (lastId: any) => Promise<any[]>;
 }
+
+export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
 
 export type AfterRemoteAddCallback = (set: any, get: any, queue: QueueToSyncCallback, stateKey: string, item: SyncedRecord) => void;
 
