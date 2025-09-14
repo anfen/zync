@@ -39,6 +39,8 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                 continue;
             }
 
+            delete remote.deleted;
+
             const pending = localItem && pendingChanges.some((p: any) => p.stateKey === stateKey && p.localId === localItem._localId);
             if (localItem && !pending) {
                 const merged = {

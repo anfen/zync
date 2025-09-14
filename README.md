@@ -126,7 +126,8 @@ useStore.sync.startFirstLoad();
 ```
 
 ### In your API:
-*(Supabase example, but could be fetch, GraphQL, etc.)*
+
+_(Supabase example, but could be fetch, GraphQL, etc.)_
 
 ```ts
 import { ApiFunctions } from '@anfenn/zync';
@@ -158,7 +159,7 @@ async function add(item: any): Promise<any | undefined> {
 
 async function update(id: number, changes: any): Promise<boolean> {
     const { status, statusText, data } = await supabase.from('fact').update(changes).eq('id', id).select();
-    
+
     if (status !== 200) {
         throw new Error(statusText);
     }

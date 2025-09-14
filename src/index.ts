@@ -190,6 +190,8 @@ export function persistWithSync<TStore extends object>(
 
                                 if (remote.deleted) continue;
 
+                                delete remote.deleted;
+
                                 const localItem = remote.id ? localById.get(remote.id) : undefined;
                                 if (localItem) {
                                     const merged = {
@@ -238,6 +240,7 @@ export function persistWithSync<TStore extends object>(
             }));
         }
 
+        // Never call inside Zustand set() due to itself calling set(), so may cause lost state changes
         function queueToSync(action: any, stateKey: string, ...localIds: string[]) {
             set((state: any) => {
                 const pendingChanges: any[] = state.syncState.pendingChanges || [];

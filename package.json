@@ -1,8 +1,8 @@
 {
   "name": "@anfenn/zync",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "private": false,
-  "description": "Sync middleware for zustand",
+  "description": "Sync middleware for Zustand",
   "keywords": [],
   "license": "MIT",
   "author": "Adam Fennell",
