@@ -6,10 +6,12 @@ Unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 
 ## Benefits
 
+- Simple to sync any state with a backend
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
 - Zync's persistWithSync() is a drop-in replacement for Zustand's persist()
 - Allows for idiomatic use of Zustand
 - Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
+- **_Coming soon_**: Customisable conflict resolution. Currently last-write-wins.
 
 ## Requirements
 
@@ -123,6 +125,89 @@ useStore.sync.enable(true | false);
 useStore.sync.startFirstLoad();
 ```
 
+### In your API:
+*(Supabase example, but could be fetch, GraphQL, etc.)*
+
+```ts
+import { ApiFunctions } from '@anfenn/zync';
+import { supabase } from './supabase';
+
+export type Fact = {
+    _localId: string;
+    fact: string;
+    // Server assigned fields
+    id?: number;
+    updated_at?: string;
+};
+
+export const factApi: ApiFunctions = { add, update, remove, list, firstLoad };
+
+async function add(item: any): Promise<any | undefined> {
+    const { data, error } = await supabase.from('fact').insert(item).select();
+
+    if (error) {
+        // Throw errors to cause Zync to retry
+        throw new Error(error.message);
+    }
+
+    if (data && data.length > 0) {
+        // Must return server id, and any other fields you want merged in
+        return { id: data[0].id };
+    }
+}
+
+async function update(id: number, changes: any): Promise<boolean> {
+    const { status, statusText, data } = await supabase.from('fact').update(changes).eq('id', id).select();
+    
+    if (status !== 200) {
+        throw new Error(statusText);
+    }
+
+    // Must return success boolean to tell Zync to dequeue update
+    const changed = !!data?.[0];
+    return changed;
+}
+
+// Soft delete
+async function remove(id: number) {
+    const payload = {
+        deleted: true,
+    };
+
+    const { status, statusText } = await supabase.from('fact').update(payload).eq('id', id);
+
+    if (status !== 204) {
+        throw new Error(statusText);
+    }
+}
+
+async function list(lastUpdatedAt: Date) {
+    const { data, error } = await supabase.from('fact').select().gt('updated_at', lastUpdatedAt.toISOString());
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return data;
+}
+
+// Optional, for if you want to download all data when your app is first used
+// Called until no more records are returned
+async function firstLoad(lastId: any) {
+    // Initially undefined, so you can choose the datatype (e.g. numeric or string id)
+    // Zync will remember the last id returned, having sorted in ascending order, and passes it in as lastId next time
+    if (!lastId) lastId = 0;
+
+    const { data, error } = await supabase.from('fact').select().limit(1000).order('id', { ascending: true }).gt('id', lastId);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return data;
+}
+```
+
 ## Optional IndexedDB storage
 
 When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like dexie.js instead of Zustand would be a better solution and provide the syntax for high performance queries.
@@ -142,3 +227,7 @@ npm install --save-optional idb
 ```
 
 The library will throw a helpful runtime error if `idb` isn't installed when `createIndexedDBStorage()` is invoked.
+
+## Community
+
+PRs are welcome! [pnpm](https://pnpm.io) is used as a package manager. Run `pnpm install` to install local dependencies. Thank you for contributing!
