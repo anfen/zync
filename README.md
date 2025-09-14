@@ -56,6 +56,7 @@ export const useStore = create<any>()(
                     facts: [...state.facts, newItem],
                 }));
 
+                // Never call queueToSync() inside Zustand set() due to itself calling set(), so may cause lost state changes
                 queueToSync(SyncAction.CreateOrUpdate, item._localId, 'facts');
             },
             updateFact: (localId: string, changes: Partial<Fact>) => {
@@ -121,7 +122,7 @@ const syncState = useStore((state) => state.syncState);
 // syncState.lastPulled
 
 // Zync's control api
-useStore.sync.enable(true | false);
+useStore.sync.enable(true | false); // Defaults to false, so turn on to start syncing
 useStore.sync.startFirstLoad();
 ```
 
