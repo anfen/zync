@@ -89,7 +89,7 @@ export async function pushOne(
                     }
                     removeFromPendingChanges(set, localId, stateKey);
                     // Call hook so userland can alert the user etc.
-                    onMissingRemoteRecordDuringUpdate?.(missingStrategy, omittedItem, omittedItem._localId);
+                    onMissingRemoteRecordDuringUpdate?.(missingStrategy, item, omittedItem._localId);
                 }
                 return;
             }
