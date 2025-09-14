@@ -27,13 +27,14 @@ Unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 npm install @anfenn/zync
 ```
 
-### Zustand store creation:
+### Zustand store creation (store.ts):
 
 ```ts
-import { SyncAction, UseStoreWithSync, persistWithSync } from '@anfenn/zync';
+import { SyncAction, type UseStoreWithSync, persistWithSync } from '@anfenn/zync';
 import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
+import { factApi, type Fact } from './api';
 
 type Store = {
     facts: Fact[];
@@ -57,14 +58,14 @@ export const useStore = create<any>()(
                 }));
 
                 // Never call queueToSync() inside Zustand set() due to itself calling set(), so may cause lost state changes
-                queueToSync(SyncAction.CreateOrUpdate, item._localId, 'facts');
+                queueToSync(SyncAction.CreateOrUpdate, 'facts', item._localId);
             },
             updateFact: (localId: string, changes: Partial<Fact>) => {
                 set((state: Store) => ({
                     facts: state.facts.map((item) => (item._localId === localId ? { ...item, ...changes } : item)),
                 }));
 
-                queueToSync(SyncAction.CreateOrUpdate, localId, 'facts');
+                queueToSync(SyncAction.CreateOrUpdate, 'facts', localId);
             },
             removeFact: (localId: string) => {
                 queueToSync(SyncAction.Remove, 'facts', localId);
@@ -79,7 +80,7 @@ export const useStore = create<any>()(
 
             name: 'store',
             storage: createJSONStorage(() => localStorage),
-            // storage: createJSONStorage(() => createIndexedDBStorage({ dbName: 'my-app', storeName: 'store' })),
+            // OR storage: createJSONStorage(() => createIndexedDBStorage({ dbName: 'my-app', storeName: 'store' })),
         },
         {
             // State-to-API map to enable syncing. Must implement the full CRUD API:
@@ -109,30 +110,59 @@ export const useFacts = () =>
 ### In your component:
 
 ```ts
-// Your state
-const { facts, addFact } = useFacts();
+import { useEffect } from 'react';
+import { nextLocalId } from '@anfenn/zync';
+import { useFacts, useStore } from './store';
 
-// Zync's internal sync state
-const syncState = useStore((state) => state.syncState);
-// syncState.status // 'hydrating' | 'syncing' | 'idle'
-// syncState.error
-// syncState.enabled
-// syncState.firstLoadDone
-// syncState.pendingChanges
-// syncState.lastPulled
+function App() {
+    // Your state
+    const { facts, addFact } = useFacts();
 
-// Zync's control api
-useStore.sync.enable(true | false); // Defaults to false, so turn on to start syncing
-useStore.sync.startFirstLoad();
+    // Zync's internal sync state
+    const syncState = useStore((state) => state.syncState);
+    // syncState.status // 'hydrating' | 'syncing' | 'idle'
+    // syncState.error
+    // syncState.enabled
+    // syncState.firstLoadDone
+    // syncState.pendingChanges
+    // syncState.lastPulled
+
+    useEffect(() => {
+        // Zync's control api
+        useStore.sync.enable(true);       // Defaults to false, enable to start syncing
+        //useStore.sync.startFirstLoad(); // Batch loads from server
+    }, []);
+
+    return (
+        <>
+            <div>Sync Status: {syncState.status}</div>
+            <button
+                onClick={() =>
+                    addFact({
+                        _localId: nextLocalId(),
+                        title: 'New fact ' + Date.now(),
+                    })
+                }
+            >
+                Add Fact
+            </button>
+            {
+                facts.map((fact) => (
+                    <div key={fact._localId}>{fact.title}</div>
+                ))
+            }
+        </>
+    );
+}
 ```
 
-### In your API:
+### In your api.ts:
 
 _(Supabase example, but could be fetch, GraphQL, etc.)_
 
 ```ts
-import { ApiFunctions } from '@anfenn/zync';
-import { supabase } from './supabase';
+import type { ApiFunctions } from '@anfenn/zync';
+import { supabase } from './supabase'; // Please include your own :)
 
 export type Fact = {
     _localId: string;
