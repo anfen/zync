@@ -242,23 +242,19 @@ async function firstLoad(lastId: any) {
 
 ## Optional IndexedDB storage
 
-When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like dexie.js instead of Zustand would be a better solution and provide the syntax for high performance queries.
+Using async IndexedDB over sync localStorage gives the advantage of a responsive UI when reading/writing a very large store, as IndexedDB is running in it's own thread.
 
 If you want to use the bundled `createIndexedDBStorage()` helper, install `idb` in your project. It's intentionally optional so projects that don't use IndexedDB won't pull the dependency into their bundles.
 
-Install for runtime usage:
+[idb](https://www.npmjs.com/package/idb) is an extremely popular and lightweight wrapper to simplify IndexedDB's verbose events based api into a simple Promise based one. It also handles the inconsistencies found when running in different browsers.
 
 ```bash
 npm install idb
 ```
 
-Or add it as an optional dependency of your package:
+When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like dexie.js instead of Zustand would be a better solution and provide the syntax for high performance queries.
 
-```bash
-npm install --save-optional idb
-```
-
-The library will throw a helpful runtime error if `idb` isn't installed when `createIndexedDBStorage()` is invoked.
+From testing I've found Zustand and Zync are lightening fast even with 100,000 average sized state objects.
 
 ## Community
 
