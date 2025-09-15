@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SyncAction, createWithSync } from '../../src/index';
+import { createWithSync } from '../../src/index';
 import { storageMatrix } from '../helpers/storageMatrix';
 import { wait, waitUntil, installDeterministicUUID, resetDeterministicUUID } from '../helpers/testUtils';
 installDeterministicUUID();
@@ -27,7 +27,7 @@ type ServerRec = {
 
 function buildStore(apis: any, storage: any, logger: any, syncInterval = 30) {
     return createWithSync<StoreState>(
-        (set, get, queueToSync) => ({
+        (set, get, setAndSync) => ({
             things: [],
             addThing: (name: string) => {
                 const localId = crypto.randomUUID();
@@ -36,20 +36,17 @@ function buildStore(apis: any, storage: any, logger: any, syncInterval = 30) {
                     name,
                     updated_at: new Date().toISOString(),
                 };
-                set((state: any) => ({
+                setAndSync((state: any) => ({
                     things: [...state.things, changes],
                 }));
-                queueToSync(SyncAction.CreateOrUpdate, 'things', localId);
             },
             updateThing: (localId, changes) => {
-                set((state: any) => ({
+                setAndSync((state: any) => ({
                     things: state.things.map((t: any) => (t._localId === localId ? { ...t, ...changes } : t)),
                 }));
-                queueToSync(SyncAction.CreateOrUpdate, 'things', localId);
             },
             removeThing: (localId) => {
-                queueToSync(SyncAction.Remove, 'things', localId);
-                set((state: any) => ({
+                setAndSync((state: any) => ({
                     things: state.things.filter((t: any) => t._localId !== localId),
                 }));
             },

@@ -2,16 +2,19 @@
 
 [![npm version](https://img.shields.io/npm/v/@anfenn/zync.svg)](https://www.npmjs.com/package/@anfenn/zync)
 
-Unopinionated, bullet-proof, offline-first sync middleware for Zustand.
+Simple, bullet-proof, offline-first sync middleware for Zustand.
 
 ## Benefits
 
-- Simple to sync any state with a backend
+- Easy to sync non-nested array state with a backend (i.e. mirror remote database tables locally)
+- **"It just works"** philosophy
+- Batteries optionally included:
+    - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb))
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
 - Zync's persistWithSync() is a drop-in replacement for Zustand's persist()
 - Allows for idiomatic use of Zustand
 - Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
-- **_Coming soon_**: Customisable conflict resolution. Currently last-write-wins.
+- **_Coming soon_**: Customisable conflict resolution. Currently local-wins.
 
 ## Requirements
 
@@ -30,7 +33,7 @@ npm install @anfenn/zync
 ### Zustand store creation (store.ts):
 
 ```ts
-import { SyncAction, type UseStoreWithSync, persistWithSync } from '@anfenn/zync';
+import { type UseStoreWithSync, persistWithSync } from '@anfenn/zync';
 import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
@@ -45,32 +48,25 @@ type Store = {
 
 export const useStore = create<any>()(
     persistWithSync<Store>(
-        (set, get, queueToSync) => ({
-            // Standard Zustand state and mutation functions with new queueToSync()
+        (set, get, setAndSync) => ({
+            // Standard Zustand state and mutation functions with new setAndSync()
 
             facts: [],
             addFact: (item: Fact) => {
                 const updated_at = new Date().toISOString();
                 const newItem = { ...item, created_at: updated_at, updated_at };
 
-                set((state: Store) => ({
+                setAndSync((state: Store) => ({
                     facts: [...state.facts, newItem],
                 }));
-
-                // Never call queueToSync() inside Zustand set() due to itself calling set(), so may cause lost state changes
-                queueToSync(SyncAction.CreateOrUpdate, 'facts', item._localId);
             },
             updateFact: (localId: string, changes: Partial<Fact>) => {
-                set((state: Store) => ({
+                setAndSync((state: Store) => ({
                     facts: state.facts.map((item) => (item._localId === localId ? { ...item, ...changes } : item)),
                 }));
-
-                queueToSync(SyncAction.CreateOrUpdate, 'facts', localId);
             },
             removeFact: (localId: string) => {
-                queueToSync(SyncAction.Remove, 'facts', localId);
-
-                set((state: Store) => ({
+                setAndSync((state: Store) => ({
                     facts: state.facts.filter((item) => item._localId !== localId),
                 }));
             },
@@ -106,6 +102,9 @@ export const useFacts = () =>
         })),
     );
 ```
+
+**_NOTE_**: Zync uses an internal timer (setInterval) to sync, so it's advised to just have one store. You could have multiple, with different store names (see Zustand persist options above), but if both stores use Zync, although it would work fine, it wouldn't offer much advantage. If one store becomes large with many state keys and functions, then you could separate them into multiple files and import than with object spreading
+`e.g. {...storeState1, ...storeState2}`
 
 ### In your component:
 

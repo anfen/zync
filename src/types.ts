@@ -20,8 +20,9 @@ export interface ApiFunctions {
 }
 
 export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
+export type ConflictResolutionStrategy = 'local-wins' | 'remote-wins';
 
-export type AfterRemoteAddCallback = (set: any, get: any, queue: QueueToSyncCallback, stateKey: string, item: SyncedRecord) => void;
+export type AfterRemoteAddCallback = (set: any, get: any, setAndSync: SetAndSyncCallback, stateKey: string, item: SyncedRecord) => void;
 
 export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordStrategy, item: SyncedRecord, newLocalId?: string) => void;
 
@@ -32,6 +33,7 @@ export interface SyncOptions {
     onAfterRemoteAdd?: AfterRemoteAddCallback;
     missingRemoteRecordDuringUpdateStrategy?: MissingRemoteRecordStrategy;
     onMissingRemoteRecordDuringUpdate?: MissingRemoteRecordDuringUpdateCallback;
+    conflictResolutionStrategy?: ConflictResolutionStrategy;
 }
 
 export type SyncState = {
@@ -45,9 +47,9 @@ export type SyncState = {
     };
 };
 
-export type QueueToSyncCallback = (action: SyncAction, stateKey: string, ...localIds: string[]) => void;
+export type SetAndSyncCallback = (state: any) => void;
 
-export type SyncedStateCreator<TStore> = (set: any, get: any, queue: QueueToSyncCallback) => TStore;
+export type SyncedStateCreator<TStore> = (set: any, get: any, setAndSyncOnce: SetAndSyncCallback) => TStore;
 
 export interface PendingChange {
     action: SyncAction;

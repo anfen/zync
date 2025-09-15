@@ -1,8 +1,17 @@
 import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
-import { orderFor, findApi, nextLocalId } from './helpers';
-import type { ApiFunctions, SyncOptions, SyncState, SyncedStateCreator, PendingChange, UseStoreWithSync, MissingRemoteRecordStrategy } from './types';
+import { orderFor, findApi, nextLocalId, findChanges, type ChangeRecord } from './helpers';
+import type {
+    ApiFunctions,
+    SyncOptions,
+    SyncState,
+    SyncedStateCreator,
+    PendingChange,
+    UseStoreWithSync,
+    MissingRemoteRecordStrategy,
+    ConflictResolutionStrategy,
+} from './types';
 import { pull } from './pull';
 import { pushOne } from './push';
 
@@ -19,6 +28,7 @@ const DEFAULT_SYNC_INTERVAL_MILLIS = 5000;
 const DEFAULT_LOGGER: Logger = console;
 const DEFAULT_MIN_LOG_LEVEL: LogLevel = 'debug';
 const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = 'ignore';
+const DEFAULT_CONFLICT_RESOLUTION_STRATEGY: ConflictResolutionStrategy = 'local-wins';
 
 export function createWithSync<TStore extends object>(
     stateCreator: SyncedStateCreator<TStore>,
@@ -43,6 +53,7 @@ export function persistWithSync<TStore extends object>(
 ) {
     const syncInterval = syncOptions.syncInterval ?? DEFAULT_SYNC_INTERVAL_MILLIS;
     const missingStrategy = syncOptions.missingRemoteRecordDuringUpdateStrategy ?? DEFAULT_MISSING_REMOTE_RECORD_STRATEGY;
+    const conflictResolutionStrategy = syncOptions.conflictResolutionStrategy ?? DEFAULT_CONFLICT_RESOLUTION_STRATEGY;
     const logger = newLogger(syncOptions.logger ?? DEFAULT_LOGGER, syncOptions.minLogLevel ?? DEFAULT_MIN_LOG_LEVEL);
 
     const baseOnRehydrate = persistOptions?.onRehydrateStorage;
@@ -115,7 +126,7 @@ export function persistWithSync<TStore extends object>(
             for (const stateKey of Object.keys(syncApi)) {
                 try {
                     const api = findApi(stateKey, syncApi);
-                    await pull(set, get, stateKey, api, logger);
+                    await pull(set, get, stateKey, api, logger, conflictResolutionStrategy);
                 } catch (err) {
                     syncError = syncError ?? (err as Error);
                     logger.error(`[zync] pull:error stateKey=${stateKey}`, err);
@@ -123,12 +134,12 @@ export function persistWithSync<TStore extends object>(
             }
 
             // 2) PUSH queued changes
-            const snapshot: PendingChange[] = [...(get().syncState.pendingChanges || [])];
+            const changesSnapshot: PendingChange[] = [...(get().syncState.pendingChanges || [])];
 
-            // Deterministic ordering: Create -> Update -> Remove so dependencies (e.g. id assignment) happen early
-            snapshot.sort((a, b) => orderFor(a.action) - orderFor(b.action));
+            // Deterministic ordering: Create -> Update -> Remove so dependencies (e.g. id assignment) happen first
+            changesSnapshot.sort((a, b) => orderFor(a.action) - orderFor(b.action));
 
-            for (const change of snapshot) {
+            for (const change of changesSnapshot) {
                 try {
                     const api = findApi(change.stateKey, syncApi);
                     await pushOne(
@@ -137,7 +148,7 @@ export function persistWithSync<TStore extends object>(
                         change,
                         api,
                         logger,
-                        queueToSync,
+                        setAndQueueToSync,
                         missingStrategy,
                         syncOptions.onMissingRemoteRecordDuringUpdate,
                         syncOptions.onAfterRemoteAdd,
@@ -240,52 +251,63 @@ export function persistWithSync<TStore extends object>(
             }));
         }
 
-        // Never call inside Zustand set() due to itself calling set(), so may cause lost state changes
-        function queueToSync(action: any, stateKey: string, ...localIds: string[]) {
-            set((state: any) => {
-                const pendingChanges: any[] = state.syncState.pendingChanges || [];
-
-                for (const localId of localIds) {
-                    const item = state[stateKey].find((i: any) => i._localId === localId);
-                    if (!item) {
-                        logger.error(`[zync] queueToSync:no-local-item localId=${localId}`);
-                        continue;
-                    }
-
-                    const queueItem = pendingChanges.find((p) => p.localId === localId && p.stateKey === stateKey);
-                    if (queueItem) {
-                        queueItem.version += 1;
-
-                        if (queueItem.action === SyncAction.CreateOrUpdate && action === SyncAction.Remove && item.id) {
-                            queueItem.action = SyncAction.Remove;
-                            queueItem.id = item.id;
-                            logger.debug(`[zync] queueToSync:changed-to-remove action=${action} localId=${localId} v=${queueItem.version}`);
-                        } else {
-                            logger.debug(`[zync] queueToSync:re-queued action=${action} localId=${localId} v=${queueItem.version}`);
-                        }
-                    } else {
-                        pendingChanges.push({ action, stateKey, localId, id: item.id, version: 1 });
-                        logger.debug(`[zync] queueToSync:added action=${action} localId=${localId}`);
-                    }
-                }
-
-                return {
-                    syncState: {
-                        ...(state.syncState || {}),
-                        pendingChanges,
-                    },
-                };
-            });
-            syncOnce();
-        }
-
-        function setAndSync(partial: any) {
+        function setAndSyncOnce(partial: any) {
             if (typeof partial === 'function') {
                 set((state: any) => ({ ...partial(state) }));
             } else {
                 set(partial);
             }
             syncOnce();
+        }
+
+        function setAndQueueToSync(partial: any) {
+            if (typeof partial === 'function') {
+                set((state: any) => newSyncState(state, partial(state)));
+            } else {
+                set((state: any) => newSyncState(state, partial));
+            }
+            syncOnce();
+        }
+
+        function newSyncState(state: any, partial: any) {
+            const pendingChanges: PendingChange[] = state.syncState.pendingChanges || [];
+
+            Object.keys(partial).map((stateKey) => {
+                const current = state[stateKey];
+                const updated = partial[stateKey];
+                const changes = findChanges(current, updated); // find additions, deletions & updates
+                addToPendingChanges(pendingChanges, stateKey, changes);
+            });
+
+            return {
+                ...partial,
+                syncState: {
+                    ...(state.syncState || {}),
+                    pendingChanges,
+                },
+            };
+        }
+
+        function addToPendingChanges(pendingChanges: PendingChange[], stateKey: string, changes: Map<string, ChangeRecord>) {
+            for (const [localId, change] of changes) {
+                const action = change.updatedItem === null ? SyncAction.Remove : SyncAction.CreateOrUpdate;
+
+                const queueItem = pendingChanges.find((p) => p.localId === localId && p.stateKey === stateKey);
+                if (queueItem) {
+                    queueItem.version += 1;
+
+                    if (queueItem.action === SyncAction.CreateOrUpdate && action === SyncAction.Remove && change.currentItem.id) {
+                        queueItem.action = SyncAction.Remove;
+                        queueItem.id = change.currentItem.id;
+                        logger.debug(`[zync] addToPendingChanges:changed-to-remove action=${action} localId=${localId} v=${queueItem.version}`);
+                    } else {
+                        logger.debug(`[zync] addToPendingChanges:re-queued action=${action} localId=${localId} v=${queueItem.version}`);
+                    }
+                } else {
+                    pendingChanges.push({ action, stateKey, localId, id: change.currentItem?.id, version: 1 });
+                    logger.debug(`[zync] addToPendingChanges:added action=${action} localId=${localId}`);
+                }
+            }
         }
 
         function enable(enabled: boolean) {
@@ -333,7 +355,7 @@ export function persistWithSync<TStore extends object>(
             startFirstLoad,
         };
 
-        const userState = stateCreator(setAndSync, get, queueToSync) as TStore;
+        const userState = stateCreator(setAndSyncOnce, get, setAndQueueToSync) as TStore;
 
         return {
             ...userState,

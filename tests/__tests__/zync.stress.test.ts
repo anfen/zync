@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { waitUntil, installDeterministicUUID, resetDeterministicUUID } from '../helpers/testUtils';
 import { storageMatrix } from '../helpers/storageMatrix';
-import { createWithSync, SyncAction } from '../../src/index';
+import { createWithSync } from '../../src/index';
 
 installDeterministicUUID();
 
@@ -71,21 +71,18 @@ function makeFaultyApis(opts: { errorRate?: number; maxDelayMs?: number } = {}) 
 
 function buildStressStore(apis: any, storage: any, syncInterval = 20) {
     return createWithSync<any>(
-        (set: any, get: any, queueToSync: any) => ({
+        (set: any, get: any, setAndSync: any) => ({
             items: [] as Item[],
             addItem: (name: string) => {
                 const localId = crypto.randomUUID();
                 const rec = { _localId: localId, name, updated_at: new Date().toISOString() };
-                set({ items: [...get().items, rec] });
-                queueToSync(SyncAction.CreateOrUpdate, 'items', localId);
+                setAndSync({ items: [...get().items, rec] });
             },
             updateItem: (localId: string, changes: Partial<Item>) => {
-                set({ items: get().items.map((i: any) => (i._localId === localId ? { ...i, ...changes, updated_at: new Date().toISOString() } : i)) });
-                queueToSync(SyncAction.CreateOrUpdate, 'items', localId);
+                setAndSync({ items: get().items.map((i: any) => (i._localId === localId ? { ...i, ...changes, updated_at: new Date().toISOString() } : i)) });
             },
             removeItem: (localId: string) => {
-                queueToSync(SyncAction.Remove, 'items', localId);
-                set({ items: get().items.filter((i: any) => i._localId !== localId) });
+                setAndSync({ items: get().items.filter((i: any) => i._localId !== localId) });
             },
         }),
         { name: 'stress-store', storage },

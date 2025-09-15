@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SyncAction, createWithSync } from '../../src/index';
+import { createWithSync } from '../../src/index';
 import { storageMatrix } from '../helpers/storageMatrix';
 import { wait, installDeterministicUUID, resetDeterministicUUID, waitUntil } from '../helpers/testUtils';
 installDeterministicUUID();
@@ -21,7 +21,7 @@ interface State {
 
 function build(apis: any, storage: any, initial: Partial<State> = {}, syncInterval = 25) {
     return createWithSync<State>(
-        (set, get, queueToSync) => ({
+        (set, get, setAndSync) => ({
             items: [],
             unsynced: [],
             add: (name: string) =>
@@ -35,7 +35,7 @@ function build(apis: any, storage: any, initial: Partial<State> = {}, syncInterv
                         },
                     ],
                 }),
-            upd: (lid, _c) => queueToSync(SyncAction.CreateOrUpdate, 'items', lid),
+            upd: (lid, _c) => setAndSync({ items: get().items.map((i: any) => (i._localId === lid ? { ...i, ..._c } : i)) }),
             syncState: { done: true },
             ...initial,
         }),

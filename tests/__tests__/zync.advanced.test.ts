@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SyncAction, createWithSync } from '../../src/index';
+import { createWithSync } from '../../src/index';
 import { storageMatrix } from '../helpers/storageMatrix';
 
 import { installDeterministicUUID, resetDeterministicUUID } from '../helpers/testUtils';
@@ -73,11 +73,11 @@ function buildApis() {
 
 function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any = 'none') {
     return createWithSync<StoreState>(
-        (set, get, queueToSync) => ({
+        (set, get, setAndSync) => ({
             items: [],
             addItem: (name: string) => {
                 const localId = crypto.randomUUID();
-                set({
+                setAndSync({
                     items: [
                         ...get().items,
                         {
@@ -87,17 +87,14 @@ function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any
                         },
                     ],
                 });
-                queueToSync(SyncAction.CreateOrUpdate, 'items', localId);
             },
             updateItem: (localId, changes) => {
-                set({
+                setAndSync({
                     items: get().items.map((i: any) => (i._localId === localId ? { ...i, ...changes } : i)),
                 });
-                queueToSync(SyncAction.CreateOrUpdate, 'items', localId);
             },
             removeItem: (localId) => {
-                queueToSync(SyncAction.Remove, 'items', localId);
-                set({
+                setAndSync({
                     items: get().items.filter((i: any) => i._localId !== localId),
                 });
             },

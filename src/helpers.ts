@@ -45,3 +45,57 @@ export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>)
     }
     return api;
 }
+
+export type ChangeRecord = {
+    currentItem?: any;
+    updatedItem?: any;
+    changes: any;
+};
+
+/**
+ * Compares the top-level keys of items in `current` and `updated` arrays (assumed to have `_localId`).
+ * Returns a Map where the key is `_localId` and the value is an object with:
+ * - `currentItem`: The item from `current` (or `null` for additions).
+ * - `updatedItem`: The item from `updated` (or `null` for deletions).
+ * - `changes`: An object with differing top-level keys and their values (or the full item for additions, or `null` for deletions).
+ */
+export function findChanges(current: any[], updated: any[]): Map<string, ChangeRecord> {
+    const currentMap = new Map<string, any>();
+    for (const item of current) {
+        if (item && item._localId) {
+            currentMap.set(item._localId, item);
+        }
+    }
+
+    const changesMap = new Map<string, { currentItem: any; updatedItem: any; changes: any }>();
+
+    // Check for changes and additions
+    for (const item of updated) {
+        if (item && item._localId) {
+            const curr = currentMap.get(item._localId);
+            if (curr) {
+                const diff: any = {};
+                for (const key in curr) {
+                    if (key !== '_localId' && curr[key] !== item[key]) {
+                        diff[key] = item[key];
+                    }
+                }
+                if (Object.keys(diff).length > 0) {
+                    changesMap.set(item._localId, { currentItem: curr, updatedItem: item, changes: diff });
+                }
+            } else {
+                // Addition
+                changesMap.set(item._localId, { currentItem: null, updatedItem: item, changes: item });
+            }
+        }
+    }
+
+    // Check for deletions
+    for (const [localId, curr] of currentMap) {
+        if (!updated.some((u) => u && u._localId === localId)) {
+            changesMap.set(localId, { currentItem: curr, updatedItem: null, changes: null });
+        }
+    }
+
+    return changesMap;
+}

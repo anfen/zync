@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 import { waitUntil } from '../helpers/testUtils';
 
-import { SyncAction, type UseStoreWithSync, createWithSync, persistWithSync } from '../../src/index';
+import { type UseStoreWithSync, createWithSync, persistWithSync } from '../../src/index';
 import { storageMatrix } from '../helpers/storageMatrix';
 
 import { installDeterministicUUID, resetDeterministicUUID } from '../helpers/testUtils';
@@ -72,7 +72,7 @@ function makeApis() {
 
 function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any = 'debug') {
     return createWithSync<StoreState>(
-        (set, get, queueToSync) => ({
+        (set, get, setAndSync) => ({
             fish: [],
             addFish: (name: string) => {
                 const localId = crypto.randomUUID();
@@ -82,21 +82,17 @@ function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any
                     updated_at: new Date().toISOString(),
                 };
 
-                set({
+                setAndSync({
                     fish: [...get().fish, changes],
                 });
-                queueToSync(SyncAction.CreateOrUpdate, 'fish', localId);
             },
             updateFish: (localId, changes) => {
-                set({
+                setAndSync({
                     fish: get().fish.map((f: any) => (f._localId === localId ? { ...f, ...changes, updated_at: new Date().toISOString() } : f)),
                 });
-                queueToSync(SyncAction.CreateOrUpdate, 'fish', localId);
             },
             removeFish: (localId) => {
-                // queue delete first to capture remote id, then remove locally for good UX
-                queueToSync(SyncAction.Remove, 'fish', localId);
-                set({
+                setAndSync({
                     fish: get().fish.filter((f: any) => f._localId !== localId),
                 });
             },
@@ -111,7 +107,7 @@ function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any
 function buildStoreWithoutHelper(apis: any, storage: any, syncInterval = 50, minLogLevel: any = 'debug') {
     return create<any>()(
         persistWithSync<StoreState>(
-            (set, get, queueToSync) => ({
+            (set, get, setAndSync) => ({
                 fish: [],
                 addFish: (name: string) => {
                     const localId = crypto.randomUUID();
@@ -121,21 +117,17 @@ function buildStoreWithoutHelper(apis: any, storage: any, syncInterval = 50, min
                         updated_at: new Date().toISOString(),
                     };
 
-                    set({
+                    setAndSync({
                         fish: [...get().fish, changes],
                     });
-                    queueToSync(SyncAction.CreateOrUpdate, 'fish', localId);
                 },
                 updateFish: (localId, changes) => {
-                    set({
+                    setAndSync({
                         fish: get().fish.map((f: any) => (f._localId === localId ? { ...f, ...changes, updated_at: new Date().toISOString() } : f)),
                     });
-                    queueToSync(SyncAction.CreateOrUpdate, 'fish', localId);
                 },
                 removeFish: (localId) => {
-                    // queue delete first to capture remote id, then remove locally for good UX
-                    queueToSync(SyncAction.Remove, 'fish', localId);
-                    set({
+                    setAndSync({
                         fish: get().fish.filter((f: any) => f._localId !== localId),
                     });
                 },
