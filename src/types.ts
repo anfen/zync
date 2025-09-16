@@ -57,6 +57,7 @@ export interface PendingChange {
     localId: string;
     id?: any;
     version: number;
+    changes?: any;
 }
 
 export type UseStoreWithSync<T> = UseBoundStore<

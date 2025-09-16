@@ -304,7 +304,7 @@ export function persistWithSync<TStore extends object>(
                         logger.debug(`[zync] addToPendingChanges:re-queued action=${action} localId=${localId} v=${queueItem.version}`);
                     }
                 } else {
-                    pendingChanges.push({ action, stateKey, localId, id: change.currentItem?.id, version: 1 });
+                    pendingChanges.push({ action, stateKey, localId, id: change.currentItem?.id, version: 1, changes: change.changes });
                     logger.debug(`[zync] addToPendingChanges:added action=${action} localId=${localId}`);
                 }
             }

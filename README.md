@@ -4,6 +4,8 @@
 
 Simple, bullet-proof, offline-first sync middleware for Zustand.
 
+**_STATUS_**: Actively developed in alpha stage while requirements are being understood. Api may change, requests are welcome.
+
 ## Benefits
 
 - Easy to sync non-nested array state with a backend (i.e. mirror remote database tables locally)

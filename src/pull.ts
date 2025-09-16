@@ -42,9 +42,9 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
 
             delete remote.deleted;
 
-            const pending = localItem && pendingChanges.some((p: any) => p.stateKey === stateKey && p.localId === localItem._localId);
             if (localItem) {
-                if (pending) {
+                const pendingChange = pendingChanges.find((p: any) => p.stateKey === stateKey && p.localId === localItem._localId);
+                if (pendingChange) {
                     // TODO: Conflict resolution required
                     switch (conflictResolutionStrategy) {
                         case 'local-wins':
@@ -66,6 +66,13 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                         // case 'try-shallow-merge':
                         //     // Try and merge all fields, fail if not possible due to conflicts
                         //     // throw new ConflictError('Details...');
+                        //     Object.entries(pendingChange.changes || {}).map(([key, value]) => {
+                        //         const localValue = localItem[key];
+                        //         const remoteValue = remote[key];
+                        //         if (localValue !== undefined && localValue !== value) {
+                        //             //throw new ConflictError(`Conflict on ${key}: local=${localValue} remote=${value}`);
+                        //         }
+                        //     });
                         //     break;
 
                         // case 'custom':
@@ -87,10 +94,10 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                         _localId: localItem._localId,
                     };
                     nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));
-                    logger.debug(`[zync] pull:merge stateKey=${stateKey} id=${remote.id}`);
+                    logger.debug(`[zync] pull:merge-remote stateKey=${stateKey} id=${remote.id}`);
                 }
             } else {
-                // Add remote item (no local or pending collisions)
+                // Add remote item (no local item)
                 nextItems = [...nextItems, { ...remote, _localId: nextLocalId() }];
                 logger.debug(`[zync] pull:add stateKey=${stateKey} id=${remote.id}`);
             }

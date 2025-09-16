@@ -67,7 +67,7 @@ export function findChanges(current: any[], updated: any[]): Map<string, ChangeR
         }
     }
 
-    const changesMap = new Map<string, { currentItem: any; updatedItem: any; changes: any }>();
+    const changesMap = new Map<string, ChangeRecord>();
 
     // Check for changes and additions
     for (const item of updated) {
