@@ -19,7 +19,7 @@ interface Fish {
 }
 interface StoreState {
     fish: Fish[];
-    addFish: (name: string) => void;
+    addFish: (item: Partial<Fish>) => void;
     updateFish: (localId: string, changes: Partial<Fish>) => void;
     removeFish: (localId: string) => void;
 }
@@ -40,8 +40,8 @@ function makeApis() {
             fish: {
                 add: vi.fn(async (item: any) => {
                     const rec = {
-                        id: ++idCounter,
                         ...item,
+                        id: ++idCounter,
                         updated_at: new Date().toISOString(),
                     };
                     server.push(rec);
@@ -74,12 +74,12 @@ function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any
     return createWithSync<StoreState>(
         (set, get, setAndSync) => ({
             fish: [],
-            addFish: (name: string) => {
+            addFish: (item: Partial<Fish>) => {
                 const localId = crypto.randomUUID();
                 const changes = {
                     _localId: localId,
-                    name,
                     updated_at: new Date().toISOString(),
+                    ...item,
                 };
 
                 setAndSync({
@@ -109,12 +109,12 @@ function buildStoreWithoutHelper(apis: any, storage: any, syncInterval = 50, min
         persistWithSync<StoreState>(
             (set, get, setAndSync) => ({
                 fish: [],
-                addFish: (name: string) => {
+                addFish: (item: Partial<Fish>) => {
                     const localId = crypto.randomUUID();
                     const changes = {
                         _localId: localId,
-                        name,
                         updated_at: new Date().toISOString(),
+                        ...item,
                     };
 
                     setAndSync({
@@ -149,7 +149,7 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         const store = buildStoreWithoutHelper(apis, make());
         await waitUntil(() => store.persist.hasHydrated());
         store.sync.enable(true);
-        store.getState().addFish('nemo');
+        store.getState().addFish({ name: 'nemo' });
         await waitUntil(() => apis.fish.add.mock.calls.length >= 1);
         await waitUntil(() => !!store.getState().fish[0]?.id);
         store.sync.enable(false);
@@ -162,7 +162,7 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         const { apis } = makeApis();
         const store = await buildStore(apis, make());
         store.sync.enable(true);
-        store.getState().addFish('nemo');
+        store.getState().addFish({ name: 'nemo' });
         await waitUntil(() => apis.fish.add.mock.calls.length >= 1);
         await waitUntil(() => !!store.getState().fish[0]?.id);
         store.sync.enable(false);
@@ -175,7 +175,7 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         const { apis, server } = makeApis();
         const store = await buildStore(apis, make());
         store.sync.enable(true);
-        store.getState().addFish('one');
+        store.getState().addFish({ name: 'one' });
         await waitUntil(() => !!store.getState().fish[0]);
         const localId = store.getState().fish[0]!._localId;
         store.getState().updateFish(localId, { name: 'two' });
@@ -189,7 +189,7 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         const { apis, server } = makeApis();
         const store = await buildStore(apis, make());
         store.sync.enable(true);
-        store.getState().addFish('gone');
+        store.getState().addFish({ name: 'gone' });
         await waitUntil(() => !!store.getState().fish[0]);
         const localId = store.getState().fish[0]!._localId;
         store.getState().removeFish(localId);
@@ -203,7 +203,7 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         const { apis, server } = makeApis();
         const store = await buildStore(apis, make());
         store.sync.enable(true);
-        store.getState().addFish('one');
+        store.getState().addFish({ name: 'one' });
         await waitUntil(() => !!store.getState().fish[0]?.id);
         expect(store.getState().fish[0]?.id).toBe(1);
         expect(server[0]?.name).toBe('one');
@@ -222,11 +222,11 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         expect(store.getState().fish.length).toBe(0);
     });
 
-    it('omits sync fields (id,_localId,updated_at,deleted) from add and update payloads', async () => {
+    it('omits sync fields (_localId,updated_at,deleted) from add and update payloads', async () => {
         const { apis } = makeApis();
         const store = await buildStore(apis, make());
         store.sync.enable(true);
-        store.getState().addFish('payload');
+        store.getState().addFish({ name: 'payload' });
         await waitUntil(() => apis.fish.add.mock.calls.length >= 1);
         // Verify add() payload
         const addArg = apis.fish.add.mock.calls[0]?.[0];
@@ -239,14 +239,12 @@ describe.each(storageMatrix)('persistWithSync basic flow (%s)', ({ make }) => {
         // Intentionally include sync fields in update changes
         store.getState().updateFish(localId, {
             name: 'payload2',
-            id: 999,
             updated_at: 'fake',
             deleted: true,
         } as any);
         await waitUntil(() => apis.fish.update.mock.calls.length >= 1);
         store.sync.enable(false);
         const updateArg = apis.fish.update.mock.calls[0]?.[1];
-        expect(updateArg.id).toBeUndefined();
         expect(updateArg._localId).toBeUndefined();
         expect(updateArg.updated_at).toBeUndefined();
         expect(updateArg.deleted).toBeUndefined();

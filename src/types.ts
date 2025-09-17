@@ -24,7 +24,7 @@ export type ConflictResolutionStrategy = 'local-wins' | 'remote-wins';
 
 export type AfterRemoteAddCallback = (set: any, get: any, setAndSync: SetAndSyncCallback, stateKey: string, item: SyncedRecord) => void;
 
-export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordStrategy, item: SyncedRecord, newLocalId?: string) => void;
+export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordStrategy, item: SyncedRecord) => void;
 
 export interface SyncOptions {
     syncInterval?: number;

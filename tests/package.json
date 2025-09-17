@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vitest --reporter=verbose --watch",
     "test": "vitest --reporter=verbose --coverage",
-    "test1": "vitest --reporter=verbose --maxWorkers 1 --coverage __tests__/zync.basic.test.ts:155",
+    "test1": "vitest --reporter=verbose --maxWorkers 1 --coverage __tests__/zync.basic.test.ts:204",
+    "test1file": "vitest --reporter=verbose --maxWorkers 1 --coverage __tests__/zync.failures.test.ts",
     "test:ci": "vitest run --reporter=verbose",
     "test:ui": "vitest --reporter=verbose --ui --coverage"
   },

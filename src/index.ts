@@ -1,7 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
-import { orderFor, findApi, nextLocalId, findChanges, type ChangeRecord } from './helpers';
+import { orderFor, findApi, findChanges, tryAddToPendingChanges } from './helpers';
 import type {
     ApiFunctions,
     SyncOptions,
@@ -14,13 +14,15 @@ import type {
 } from './types';
 import { pull } from './pull';
 import { pushOne } from './push';
+import { startFirstLoad } from './firstLoad';
 
 export { createIndexedDBStorage } from './indexedDBStorage';
 export { nextLocalId } from './helpers';
 export type { ApiFunctions, UseStoreWithSync, SyncState } from './types';
 
 export enum SyncAction {
-    CreateOrUpdate = 'create-or-update',
+    Create = 'create',
+    Update = 'update',
     Remove = 'remove',
 }
 
@@ -120,7 +122,7 @@ export function persistWithSync<TStore extends object>(
                 },
             }));
 
-            let syncError: Error | undefined;
+            let firstSyncError: Error | undefined;
 
             // 1) PULL for each stateKey
             for (const stateKey of Object.keys(syncApi)) {
@@ -128,7 +130,7 @@ export function persistWithSync<TStore extends object>(
                     const api = findApi(stateKey, syncApi);
                     await pull(set, get, stateKey, api, logger, conflictResolutionStrategy);
                 } catch (err) {
-                    syncError = syncError ?? (err as Error);
+                    firstSyncError = firstSyncError ?? (err as Error);
                     logger.error(`[zync] pull:error stateKey=${stateKey}`, err);
                 }
             }
@@ -154,7 +156,7 @@ export function persistWithSync<TStore extends object>(
                         syncOptions.onAfterRemoteAdd,
                     );
                 } catch (err) {
-                    syncError = syncError ?? (err as Error);
+                    firstSyncError = firstSyncError ?? (err as Error);
                     logger.error(`[zync] push:error change=${change}`, err);
                 }
             }
@@ -163,92 +165,14 @@ export function persistWithSync<TStore extends object>(
                 syncState: {
                     ...(state.syncState || {}),
                     status: 'idle',
-                    error: syncError,
+                    error: firstSyncError,
                 },
             }));
 
-            if (get().syncState.pendingChanges.length > 0 && !syncError) {
+            if (get().syncState.pendingChanges.length > 0 && !firstSyncError) {
                 // If there are pending changes and no sync error, we can sync again
                 await syncOnce();
             }
-        }
-
-        async function startFirstLoad() {
-            let syncError: Error | undefined;
-
-            for (const stateKey of Object.keys(syncApi)) {
-                try {
-                    logger.info(`[zync] firstLoad:start stateKey=${stateKey}`);
-
-                    const api = findApi(stateKey, syncApi);
-                    let lastId; // Start as undefined to allow the userland api code to set the initial value+type
-
-                    // Batch until empty
-                    while (true) {
-                        const batch = await api.firstLoad(lastId);
-                        if (!batch?.length) break;
-
-                        // Merge batch
-                        set((state: any) => {
-                            const local: any[] = state[stateKey] || [];
-                            const localById = new Map<any, any>(local.filter((l) => l.id).map((l) => [l.id, l]));
-
-                            let newest = new Date(state.syncState.lastPulled[stateKey] || 0);
-                            const next = [...local];
-                            for (const remote of batch) {
-                                const remoteUpdated = new Date(remote.updated_at || 0);
-                                if (remoteUpdated > newest) newest = remoteUpdated;
-
-                                if (remote.deleted) continue;
-
-                                delete remote.deleted;
-
-                                const localItem = remote.id ? localById.get(remote.id) : undefined;
-                                if (localItem) {
-                                    const merged = {
-                                        ...localItem,
-                                        ...remote,
-                                        _localId: localItem._localId,
-                                    };
-                                    const idx = next.findIndex((i) => i._localId === localItem._localId);
-                                    if (idx >= 0) next[idx] = merged;
-                                } else {
-                                    next.push({
-                                        ...remote,
-                                        _localId: nextLocalId(),
-                                    });
-                                }
-                            }
-
-                            return {
-                                [stateKey]: next,
-                                syncState: {
-                                    ...(state.syncState || {}),
-                                    lastPulled: {
-                                        ...(state.syncState.lastPulled || {}),
-                                        [stateKey]: newest.toISOString(),
-                                    },
-                                },
-                            };
-                        });
-
-                        lastId = batch[batch.length - 1].id;
-                    }
-
-                    logger.info(`[zync] firstLoad:done stateKey=${stateKey}`);
-                } catch (err) {
-                    syncError = syncError ?? (err as Error);
-                    logger.error(`[zync] firstLoad:error stateKey=${stateKey}`, err);
-                }
-            }
-
-            set((state: any) => ({
-                syncState: {
-                    ...(state.syncState || {}),
-                    firstLoadDone: true,
-                    error: syncError,
-                },
-            }));
         }
 
         function setAndSyncOnce(partial: any) {
@@ -276,7 +200,7 @@ export function persistWithSync<TStore extends object>(
                 const current = state[stateKey];
                 const updated = partial[stateKey];
                 const changes = findChanges(current, updated); // find additions, deletions & updates
-                addToPendingChanges(pendingChanges, stateKey, changes);
+                tryAddToPendingChanges(pendingChanges, stateKey, changes);
             });
 
             return {
@@ -286,28 +210,6 @@ export function persistWithSync<TStore extends object>(
                     pendingChanges,
                 },
             };
-        }
-
-        function addToPendingChanges(pendingChanges: PendingChange[], stateKey: string, changes: Map<string, ChangeRecord>) {
-            for (const [localId, change] of changes) {
-                const action = change.updatedItem === null ? SyncAction.Remove : SyncAction.CreateOrUpdate;
-
-                const queueItem = pendingChanges.find((p) => p.localId === localId && p.stateKey === stateKey);
-                if (queueItem) {
-                    queueItem.version += 1;
-
-                    if (queueItem.action === SyncAction.CreateOrUpdate && action === SyncAction.Remove && change.currentItem.id) {
-                        queueItem.action = SyncAction.Remove;
-                        queueItem.id = change.currentItem.id;
-                        logger.debug(`[zync] addToPendingChanges:changed-to-remove action=${action} localId=${localId} v=${queueItem.version}`);
-                    } else {
-                        logger.debug(`[zync] addToPendingChanges:re-queued action=${action} localId=${localId} v=${queueItem.version}`);
-                    }
-                } else {
-                    pendingChanges.push({ action, stateKey, localId, id: change.currentItem?.id, version: 1, changes: change.changes });
-                    logger.debug(`[zync] addToPendingChanges:added action=${action} localId=${localId}`);
-                }
-            }
         }
 
         function enable(enabled: boolean) {
@@ -352,7 +254,7 @@ export function persistWithSync<TStore extends object>(
         // public useStore.sync api, similar in principle to useStore.persist
         storeApi.sync = {
             enable,
-            startFirstLoad,
+            startFirstLoad: () => startFirstLoad(set, syncApi, logger),
         };
 
         const userState = stateCreator(setAndSyncOnce, get, setAndQueueToSync) as TStore;

@@ -10,23 +10,26 @@ Simple, bullet-proof, offline-first sync middleware for Zustand.
 
 - Easy to sync non-nested array state with a backend (i.e. mirror remote database tables locally)
 - **"It just works"** philosophy
+- Optimistic UI updates
 - Batteries optionally included:
     - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb))
+    - UUID helper
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
 - Zync's persistWithSync() is a drop-in replacement for Zustand's persist()
 - Allows for idiomatic use of Zustand
 - Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
+- Client or server assigned primary key, of any datatype
 - **_Coming soon_**: Customisable conflict resolution. Currently local-wins.
 
 ## Requirements
 
 - Client records will have a `_localId` field which is stable and never sent to the server. It is ideal for use as a key in JSX. The provided helper function `nextLocalId()` returns a UUID, but you could use any unique value
 - Server records must have:
-    - `id`: Server assigned unique identifier (any datatype)
+    - `id`: Any datatype, can be a server OR client assigned value
     - `updated_at`: Server assigned **_millisecond_** timestamp (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
     - `deleted`: Boolean, used for soft deletes, to allow other clients to download deleted records to keep their local records in sync
 
-## Quickstart
+## Quickstart - Server assigned id example
 
 ```bash
 npm install @anfenn/zync
@@ -55,7 +58,7 @@ export const useStore = create<any>()(
 
             facts: [],
             addFact: (item: Fact) => {
-                const updated_at = new Date().toISOString();
+                const updated_at = new Date().toISOString(); // Used as an optimistic UI update only, never sent to server
                 const newItem = { ...item, created_at: updated_at, updated_at };
 
                 setAndSync((state: Store) => ({
@@ -105,7 +108,7 @@ export const useFacts = () =>
     );
 ```
 
-**_NOTE_**: Zync uses an internal timer (setInterval) to sync, so it's advised to just have one store. You could have multiple, with different store names (see Zustand persist options above), but if both stores use Zync, although it would work fine, it wouldn't offer much advantage. If one store becomes large with many state keys and functions, then you could separate them into multiple files and import than with object spreading
+**_NOTE_**: Zync uses an internal timer (setInterval) to sync, so it's advised to just have one store. You could have multiple, with different store names (see Zustand persist options above), but if both stores use Zync, although it would work fine, it wouldn't offer much advantage. If one store becomes large with many state keys and functions, then you could separate them into multiple files and import them with object spreading
 `e.g. {...storeState1, ...storeState2}`
 
 ### In your component:
@@ -240,6 +243,10 @@ async function firstLoad(lastId: any) {
     return data;
 }
 ```
+
+## Client side assigned id
+
+As simple as just setting the id field when creating a new record (and amend model types if using Typescript)
 
 ## Optional IndexedDB storage
 

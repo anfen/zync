@@ -1,5 +1,5 @@
-import { removeFromPendingChanges, omitSyncFields, samePendingVersion } from './helpers';
-import { SyncAction } from './index';
+import { removeFromPendingChanges, samePendingVersion, setPendingChangeToUpdate } from './helpers';
+import { nextLocalId, SyncAction } from './index';
 import type { Logger } from './logger';
 import type {
     AfterRemoteAddCallback,
@@ -9,8 +9,6 @@ import type {
     PendingChange,
     SetAndSyncCallback,
 } from './types';
-
-const SYNC_FIELDS = ['id', '_localId', 'updated_at', 'deleted'] as const;
 
 export async function pushOne(
     set: any,
@@ -25,111 +23,103 @@ export async function pushOne(
 ) {
     logger.debug(`[zync] push:attempt action=${change.action} stateKey=${change.stateKey} localId=${change.localId}`);
 
-    const { action, stateKey, localId, id, version } = change;
+    const { action, stateKey, localId, id, version, changes } = change;
+    const changesClone = { ...changes }; // TODO: Test if needed
 
     switch (action) {
         case SyncAction.Remove:
             if (!id) {
-                logger.warn(`[zync] push:remove:no-id ${stateKey} ${localId}`);
+                logger.warn(`[zync] push:remove:no-id stateKey=${stateKey} localId=${localId}`);
                 removeFromPendingChanges(set, localId, stateKey);
                 return;
             }
 
             await api.remove(id);
-            logger.debug(`[zync] push:remove:success ${stateKey} ${localId} ${id}`);
+            logger.debug(`[zync] push:remove:success stateKey=${stateKey} localId=${localId} id=${id}`);
             removeFromPendingChanges(set, localId, stateKey);
             break;
 
-        case SyncAction.CreateOrUpdate: {
-            const state = get();
-            const items: any[] = state[stateKey] || [];
-            const item = items.find((i) => i._localId === localId);
-            if (!item) {
-                logger.warn(`[zync] push:create-or-update:no-local-item`, {
-                    stateKey,
-                    localId,
-                });
-                removeFromPendingChanges(set, localId, stateKey);
-                return;
-            }
-
-            const omittedItem = omitSyncFields(item, SYNC_FIELDS);
-            if (item.id) {
-                // Update
-                const changed = await api.update(item.id, omittedItem);
-                if (changed) {
-                    logger.debug('[zync] push:update:success', {
-                        stateKey,
-                        localId,
-                        id: item.id,
-                    });
-                    if (samePendingVersion(get, stateKey, localId, version)) {
-                        removeFromPendingChanges(set, localId, stateKey);
-                    }
-                    return;
-                } else {
-                    switch (missingStrategy) {
-                        case 'delete-local-record':
-                            set((s: any) => ({
-                                [stateKey]: (s[stateKey] || []).filter((i: any) => i._localId !== localId),
-                            }));
-                            logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${item.id}`);
-                            break;
-
-                        case 'insert-remote-record':
-                            omittedItem._localId = crypto.randomUUID();
-                            omittedItem.updated_at = new Date().toISOString();
-
-                            // replace old with new copy without id so it becomes a Create
-                            setAndQueueToSync((s: any) => ({
-                                [stateKey]: (s[stateKey] || []).map((i: any) => (i._localId === localId ? omittedItem : i)),
-                            }));
-
-                            logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${item.id}`);
-                            break;
-
-                        case 'ignore':
-                            logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${item.id}`);
-                            break;
-
-                        default:
-                            logger.error(`[zync] push:missing-remote:unknown stateKey=${stateKey} id=${item.id} strategy=${missingStrategy}`);
-                            break;
-                    }
-
+        case SyncAction.Update: {
+            const changed = await api.update(id, changesClone);
+            if (changed) {
+                logger.debug(`[zync] push:update:success stateKey=${stateKey} localId=${localId} id=${id}`);
+                if (samePendingVersion(get, stateKey, localId, version)) {
                     removeFromPendingChanges(set, localId, stateKey);
-                    // Call hook so userland can alert the user etc.
-                    onMissingRemoteRecordDuringUpdate?.(missingStrategy, item, omittedItem._localId);
                 }
                 return;
-            }
+            } else {
+                const state = get();
+                const items: any[] = state[stateKey] || [];
+                const item = items.find((i) => i._localId === localId);
+                if (!item) {
+                    logger.warn(`[zync] push:missing-remote:no-local-item stateKey=${stateKey} localId=${localId}`);
+                    removeFromPendingChanges(set, localId, stateKey);
+                    return;
+                }
 
-            // Create
-            const result = await api.add(omittedItem);
+                switch (missingStrategy) {
+                    case 'delete-local-record':
+                        set((s: any) => ({
+                            [stateKey]: (s[stateKey] || []).filter((i: any) => i._localId !== localId),
+                        }));
+                        logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${item.id}`);
+                        break;
+
+                    case 'insert-remote-record': {
+                        const newItem = {
+                            ...item,
+                            _localId: nextLocalId(),
+                            updated_at: new Date().toISOString(),
+                        };
+
+                        // replace old with modified and queue Create
+                        setAndQueueToSync((s: any) => ({
+                            [stateKey]: (s[stateKey] || []).map((i: any) => (i._localId === localId ? newItem : i)),
+                        }));
+
+                        logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${newItem.id}`);
+                        break;
+                    }
+
+                    case 'ignore':
+                        logger.debug(`[zync] push:missing-remote:${missingStrategy} stateKey=${stateKey} id=${item.id}`);
+                        break;
+
+                    default:
+                        logger.error(`[zync] push:missing-remote:unknown-strategy stateKey=${stateKey} id=${item.id} strategy=${missingStrategy}`);
+                        break;
+                }
+
+                removeFromPendingChanges(set, localId, stateKey);
+                // Call hook so userland can alert the user etc.
+                onMissingRemoteRecordDuringUpdate?.(missingStrategy, item);
+            }
+            break;
+        }
+
+        case SyncAction.Create: {
+            const result = await api.add(changesClone);
             if (result) {
-                logger.debug('[zync] push:create:success', {
-                    stateKey,
-                    localId,
-                    id: result.id,
-                });
+                logger.debug(`[zync] push:create:success stateKey=${stateKey} localId=${localId} id=${id}`);
 
                 // Merge server-assigned fields (id, updated_at, etc) directly into local entity
                 set((s: any) => ({
                     [stateKey]: (s[stateKey] || []).map((i: any) => (i._localId === localId ? { ...i, ...result } : i)),
                 }));
+
                 if (samePendingVersion(get, stateKey, localId, version)) {
                     removeFromPendingChanges(set, localId, stateKey);
+                } else {
+                    // Item changed during request, ensure any pendingChanges entry has id and is now an Update
+                    setPendingChangeToUpdate(get, stateKey, localId, result.id);
                 }
+
+                const finalItem = { ...changes, ...result, _localId: localId };
+
                 // Call hook so userland can perform any cascading adjustments
-                onAfterRemoteAdd?.(set, get, setAndQueueToSync, stateKey, {
-                    ...item,
-                    ...result,
-                });
+                onAfterRemoteAdd?.(set, get, setAndQueueToSync, stateKey, finalItem);
             } else {
-                logger.warn('[zync] push:create:no-result', {
-                    stateKey,
-                    localId,
-                });
+                logger.warn(`[zync] push:create:no-result stateKey=${stateKey} localId=${localId} id=${id}`);
                 if (samePendingVersion(get, stateKey, localId, version)) {
                     removeFromPendingChanges(set, localId, stateKey);
                 }

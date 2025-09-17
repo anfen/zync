@@ -66,13 +66,6 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                         // case 'try-shallow-merge':
                         //     // Try and merge all fields, fail if not possible due to conflicts
                         //     // throw new ConflictError('Details...');
-                        //     Object.entries(pendingChange.changes || {}).map(([key, value]) => {
-                        //         const localValue = localItem[key];
-                        //         const remoteValue = remote[key];
-                        //         if (localValue !== undefined && localValue !== value) {
-                        //             //throw new ConflictError(`Conflict on ${key}: local=${localValue} remote=${value}`);
-                        //         }
-                        //     });
                         //     break;
 
                         // case 'custom':
@@ -91,7 +84,6 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                     const merged = {
                         ...localItem,
                         ...remote,
-                        _localId: localItem._localId,
                     };
                     nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));
                     logger.debug(`[zync] pull:merge-remote stateKey=${stateKey} id=${remote.id}`);

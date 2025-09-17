@@ -1,22 +1,26 @@
 import { SyncAction } from './index';
 import type { ApiFunctions, PendingChange } from './types';
 
+const SYNC_FIELDS = ['_localId', 'updated_at', 'deleted'] as const;
+
 export function nextLocalId(): string {
     return crypto.randomUUID();
 }
 
 export function orderFor(a: SyncAction): number {
     switch (a) {
-        case SyncAction.CreateOrUpdate:
+        case SyncAction.Create:
             return 1;
-        case SyncAction.Remove:
+        case SyncAction.Update:
             return 2;
+        case SyncAction.Remove:
+            return 3;
     }
 }
 
-export function omitSyncFields(item: any, fields: readonly string[]) {
+export function omitSyncFields(item: any) {
     const result = { ...item };
-    for (const k of fields) delete result[k];
+    for (const k of SYNC_FIELDS) delete result[k];
     return result;
 }
 
@@ -38,6 +42,48 @@ export function removeFromPendingChanges(set: any, localId: string, stateKey: st
     });
 }
 
+export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey: string, changes: Map<string, ChangeRecord>) {
+    for (const [localId, change] of changes) {
+        let omittedItem = omitSyncFields(change.changes);
+        const queueItem = pendingChanges.find((p) => p.localId === localId && p.stateKey === stateKey);
+        const hasChanges = Object.keys(omittedItem).length > 0;
+        const action = change.updatedItem === null ? SyncAction.Remove : change.currentItem === null ? SyncAction.Create : SyncAction.Update;
+
+        if (action === SyncAction.Update && change.updatedItem && change.currentItem && change.currentItem._localId !== change.updatedItem._localId) {
+            // Here when insert-remote-record swaps local remotely deleted item with a fresh copy to push up
+            omittedItem = omitSyncFields(change.updatedItem);
+        }
+
+        if (queueItem) {
+            if (queueItem.action === SyncAction.Remove) {
+                // Once a Remove is queued, it stays a Remove
+                continue;
+            }
+
+            queueItem.version += 1;
+
+            if (action === SyncAction.Remove) {
+                queueItem.action = SyncAction.Remove;
+            } else if (hasChanges) {
+                // Never change the action here, it stays Create or Update and is removed when synced
+                queueItem.changes = { ...queueItem.changes, ...omittedItem };
+            }
+        } else if (action === SyncAction.Remove || hasChanges) {
+            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem });
+        }
+    }
+}
+
+export function setPendingChangeToUpdate(get: any, stateKey: string, localId: string, id?: any) {
+    // id is optional as the user may client assign the id, but not return it from the api
+    const pendingChanges: PendingChange[] = get().syncState.pendingChanges || [];
+    const change = pendingChanges.find((p) => p.stateKey === stateKey && p.localId === localId);
+    if (change) {
+        change.action = SyncAction.Update;
+        if (id) change.id = id;
+    }
+}
+
 export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>) {
     const api = syncApi[stateKey];
     if (!api || !api.add || !api.update || !api.remove || !api.list || !api.firstLoad) {
@@ -46,10 +92,11 @@ export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>)
     return api;
 }
 
-export type ChangeRecord = {
+type ChangeRecord = {
     currentItem?: any;
     updatedItem?: any;
     changes: any;
+    id?: any;
 };
 
 /**
@@ -63,14 +110,15 @@ export function findChanges(current: any[], updated: any[]): Map<string, ChangeR
     const currentMap = new Map<string, any>();
     for (const item of current) {
         if (item && item._localId) {
-            currentMap.set(item._localId, item);
+            currentMap.set(item._localId, { ...item });
         }
     }
 
     const changesMap = new Map<string, ChangeRecord>();
 
     // Check for changes and additions
-    for (const item of updated) {
+    for (const update of updated) {
+        const item = { ...update };
         if (item && item._localId) {
             const curr = currentMap.get(item._localId);
             if (curr) {
@@ -81,11 +129,12 @@ export function findChanges(current: any[], updated: any[]): Map<string, ChangeR
                     }
                 }
                 if (Object.keys(diff).length > 0) {
-                    changesMap.set(item._localId, { currentItem: curr, updatedItem: item, changes: diff });
+                    // Changes
+                    changesMap.set(item._localId, { currentItem: curr, updatedItem: item, changes: diff, id: curr.id ?? item.id });
                 }
             } else {
                 // Addition
-                changesMap.set(item._localId, { currentItem: null, updatedItem: item, changes: item });
+                changesMap.set(item._localId, { currentItem: null, updatedItem: item, changes: item, id: item.id });
             }
         }
     }
@@ -93,7 +142,7 @@ export function findChanges(current: any[], updated: any[]): Map<string, ChangeR
     // Check for deletions
     for (const [localId, curr] of currentMap) {
         if (!updated.some((u) => u && u._localId === localId)) {
-            changesMap.set(localId, { currentItem: curr, updatedItem: null, changes: null });
+            changesMap.set(localId, { currentItem: curr, updatedItem: null, changes: null, id: curr.id });
         }
     }
 

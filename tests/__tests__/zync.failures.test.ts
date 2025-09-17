@@ -13,7 +13,7 @@ interface Thing {
 }
 interface StoreState {
     things: Thing[];
-    addThing: (name: string) => void;
+    addThing: (item: Partial<Thing>) => void;
     updateThing: (localId: string, changes: Partial<Thing>) => void;
     removeThing: (localId: string) => void;
 }
@@ -29,12 +29,12 @@ function buildStore(apis: any, storage: any, logger: any, syncInterval = 30) {
     return createWithSync<StoreState>(
         (set, get, setAndSync) => ({
             things: [],
-            addThing: (name: string) => {
+            addThing: (item: Partial<Thing>) => {
                 const localId = crypto.randomUUID();
                 const changes = {
                     _localId: localId,
-                    name,
                     updated_at: new Date().toISOString(),
+                    ...item,
                 };
                 setAndSync((state: any) => ({
                     things: [...state.things, changes],
@@ -79,7 +79,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         store.sync.enable(true);
         // allow background sync to start
         await wait(150);
-        store.getState().addThing('a');
+        store.getState().addThing({ name: 'a' });
         await wait(300);
         store.sync.enable(false);
         const msg = store.getState().syncState.error?.message;
@@ -113,7 +113,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         store.sync.enable(true);
         // allow background sync to start
         await wait(150);
-        store.getState().addThing('x');
+        store.getState().addThing({ name: 'x' });
         await wait(200);
         const localId = store.getState().things[0]!._localId;
         store.getState().updateThing(localId, { name: 'y' });
@@ -152,7 +152,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         store.sync.enable(true);
         // allow background sync to start
         await wait(150);
-        store.getState().addThing('del');
+        store.getState().addThing({ name: 'del' });
         await wait(200);
         const localId = store.getState().things[0]!._localId;
         store.getState().removeThing(localId);
@@ -193,7 +193,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         store.sync.enable(true);
         // allow background sync to start
         await wait(140); // expect 2 list requests by now
-        store.getState().addThing('one');
+        store.getState().addThing({ name: 'one' });
         // While first sync (list) still running, trigger rapid updates causing internal syncOnce attempts
         const localId = store.getState().things[0]!._localId;
         await wait(20);
@@ -215,8 +215,8 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
                 add: vi.fn(async (item: any) => {
                     await wait(100);
                     const rec = {
-                        id: ++idCounter,
                         ...item,
+                        id: ++idCounter,
                         updated_at: new Date().toISOString(),
                     };
                     server.push(rec);
@@ -232,7 +232,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         store.sync.enable(true);
         // allow background sync to start
         await wait(150);
-        store.getState().addThing('alpha');
+        store.getState().addThing({ name: 'alpha' });
         await wait(10);
         store.getState().updateThing(store.getState().things[0]!._localId, { name: 'beta' });
         await wait(2000);
