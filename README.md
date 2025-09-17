@@ -29,11 +29,13 @@ Simple, bullet-proof, offline-first sync middleware for Zustand.
     - `updated_at`: Server assigned **_millisecond_** timestamp (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
     - `deleted`: Boolean, used for soft deletes, to allow other clients to download deleted records to keep their local records in sync
 
-## Quickstart - Server assigned id example
+## Quickstart
 
 ```bash
 npm install @anfenn/zync
 ```
+
+*The example below uses server assigned id's, but you can just set the id when creating an object for client assigned id's.*
 
 ### Zustand store creation (store.ts):
 
@@ -243,10 +245,6 @@ async function firstLoad(lastId: any) {
     return data;
 }
 ```
-
-## Client side assigned id
-
-As simple as just setting the id field when creating a new record (and amend model types if using Typescript)
 
 ## Optional IndexedDB storage
 
