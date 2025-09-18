@@ -27,7 +27,7 @@ type ServerRec = {
 
 function buildStore(apis: any, storage: any, logger: any, syncInterval = 30) {
     return createWithSync<StoreState>(
-        (set, get, setAndSync) => ({
+        (_set, _get, setAndSync) => ({
             things: [],
             addThing: (item: Partial<Thing>) => {
                 const localId = crypto.randomUUID();

@@ -71,7 +71,7 @@ function makeFaultyApis(opts: { errorRate?: number; maxDelayMs?: number } = {}) 
 
 function buildStressStore(apis: any, storage: any, syncInterval = 20) {
     return createWithSync<any>(
-        (set: any, get: any, setAndSync: any) => ({
+        (_set: any, get: any, setAndSync: any) => ({
             items: [] as Item[],
             addItem: (name: string) => {
                 const localId = crypto.randomUUID();

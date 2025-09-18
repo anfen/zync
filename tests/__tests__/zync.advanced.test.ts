@@ -73,7 +73,7 @@ function buildApis() {
 
 function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any = 'none') {
     return createWithSync<StoreState>(
-        (set, get, setAndSync) => ({
+        (_set, get, setAndSync) => ({
             items: [],
             addItem: (name: string) => {
                 const localId = crypto.randomUUID();

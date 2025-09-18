@@ -70,7 +70,7 @@ function makeApis() {
 
 function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any = 'debug') {
     return createWithSync<StoreState>(
-        (set, get, setAndSync) => ({
+        (_set, get, setAndSync) => ({
             fish: [],
             addFish: (item: Partial<Fish>) => {
                 const localId = crypto.randomUUID();
@@ -105,7 +105,7 @@ function buildStore(apis: any, storage: any, syncInterval = 50, minLogLevel: any
 function buildStoreWithoutHelper(apis: any, storage: any, syncInterval = 50, minLogLevel: any = 'debug') {
     return create<any>()(
         persistWithSync<StoreState>(
-            (set, get, setAndSync) => ({
+            (_set, get, setAndSync) => ({
                 fish: [],
                 addFish: (item: Partial<Fish>) => {
                     const localId = crypto.randomUUID();
