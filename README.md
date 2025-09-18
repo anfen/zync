@@ -204,8 +204,8 @@ async function add(item: any): Promise<any | undefined> {
         throw new Error(error.message);
     }
 
-    if (data && data.length > 0) {
-        // Must return server id, and any other fields you want merged in
+    if (data?.length > 0) {
+        // Return server id if not using client assigned id's, and any other fields you want merged in
         return { id: data[0].id };
     }
 }
