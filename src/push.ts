@@ -40,8 +40,8 @@ export async function pushOne(
             break;
 
         case SyncAction.Update: {
-            const changed = await api.update(id, changesClone);
-            if (changed) {
+            const exists = await api.update(id, changesClone);
+            if (exists) {
                 logger.debug(`[zync] push:update:success stateKey=${stateKey} localId=${localId} id=${id}`);
                 if (samePendingVersion(get, stateKey, localId, version)) {
                     removeFromPendingChanges(set, localId, stateKey);

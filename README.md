@@ -11,6 +11,10 @@ Simple, bullet-proof, offline-first sync middleware for Zustand.
 - Easy to sync non-nested array state with a backend (i.e. mirror remote database tables locally)
 - **"It just works"** philosophy
 - Optimistic UI updates
+- Conflict resolution:
+    - 'local-wins' | 'remote-wins' _**(More in development)**_
+- Missing remote record during update strategy, to prevent accidental server deletion from losing client data:
+    - 'ignore' | 'delete-local-record' | 'insert-remote-record'
 - Batteries optionally included:
     - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb))
     - UUID helper
@@ -19,7 +23,6 @@ Simple, bullet-proof, offline-first sync middleware for Zustand.
 - Allows for idiomatic use of Zustand
 - Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
 - Client or server assigned primary key, of any datatype
-- **_Coming soon_**: Customisable conflict resolution. Currently local-wins.
 
 ## Requirements
 
@@ -35,7 +38,7 @@ Simple, bullet-proof, offline-first sync middleware for Zustand.
 npm install @anfenn/zync
 ```
 
-*The example below uses server assigned id's, but you can just set the id when creating an object for client assigned id's.*
+_The example below uses server assigned id's, but you can just set the id when creating an object for client assigned id's._
 
 ### Zustand store creation (store.ts):
 
@@ -95,6 +98,16 @@ export const useStore = create<any>()(
             // firstLoad: (lastId: any) => Promise<any[]> (Optional)
 
             facts: factApi,
+        },
+        {
+            // Options: 'ignore' | 'delete-local-record' | 'insert-remote-record'
+            // Default: 'ignore'
+            // Triggered by the api.update() returning true or false confirming the existence of the remote record after an update
+            missingRemoteRecordDuringUpdateStrategy: 'ignore',
+
+            // Options: 'local-wins' | 'remote-wins' (More coming soon)
+            // Default: 'local-wins'
+            conflictResolutionStrategy: 'local-wins',
         },
     ),
 ) as UseStoreWithSync<Store>;
@@ -201,9 +214,10 @@ async function update(id: number, changes: any): Promise<boolean> {
         throw new Error(statusText);
     }
 
-    // Must return success boolean to tell Zync to dequeue update
-    const changed = !!data?.[0];
-    return changed;
+    // Return if record exists to trigger the Zync missingRemoteRecordDuringUpdateStrategy of either:
+    // 'ignore' | 'delete-local-record' | 'insert-remote-record'
+    const exists = !!data?.[0];
+    return exists;
 }
 
 // Soft delete
