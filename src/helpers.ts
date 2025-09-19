@@ -1,10 +1,44 @@
 import { SyncAction } from './index';
-import type { ApiFunctions, PendingChange } from './types';
+import type { ApiFunctions, Conflict, FieldConflict, PendingChange, SyncState } from './types';
 
 const SYNC_FIELDS = ['_localId', 'updated_at', 'deleted'] as const;
 
-export function nextLocalId(): string {
+export function createLocalId(): string {
     return crypto.randomUUID();
+}
+
+export function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function changeKeysTo(input: any | any[], toIdKey: string, toUpdatedAtKey: string, toDeletedKey: string) {
+    if (!input) return input;
+    const isArray = Array.isArray(input);
+    const result = (isArray ? input : [input]).map((item) => {
+        const { id, updated_at, deleted, ...rest } = item;
+        return {
+            [toIdKey]: id,
+            [toUpdatedAtKey]: updated_at,
+            [toDeletedKey]: deleted,
+            ...rest,
+        };
+    });
+    return isArray ? result : result[0];
+}
+
+export function changeKeysFrom(input: any | any[], fromIdKey: string, fromUpdatedAtKey: string, fromDeletedKey: string) {
+    if (!input) return input;
+    const isArray = Array.isArray(input);
+    const result = (isArray ? input : [input]).map((item) => {
+        const { [fromIdKey]: id, [fromUpdatedAtKey]: updated_at, [fromDeletedKey]: deleted, ...rest } = item;
+        return {
+            id,
+            updated_at,
+            deleted,
+            ...rest,
+        };
+    });
+    return isArray ? result : result[0];
 }
 
 export function orderFor(a: SyncAction): number {
@@ -25,8 +59,8 @@ export function omitSyncFields(item: any) {
 }
 
 export function samePendingVersion(get: any, stateKey: string, localId: string, version: number): boolean {
-    const q: PendingChange[] = get().syncState.pendingChanges || [];
-    const curChange = q.find((p) => p.localId === localId && p.stateKey === stateKey);
+    const pending: PendingChange[] = get().syncState.pendingChanges || [];
+    const curChange = pending.find((p) => p.localId === localId && p.stateKey === stateKey);
     return curChange?.version === version;
 }
 
@@ -69,7 +103,7 @@ export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey
                 queueItem.changes = { ...queueItem.changes, ...omittedItem };
             }
         } else if (action === SyncAction.Remove || hasChanges) {
-            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem });
+            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem, current: omitSyncFields(change.currentItem) });
         }
     }
 }
@@ -82,6 +116,29 @@ export function setPendingChangeToUpdate(get: any, stateKey: string, localId: st
         change.action = SyncAction.Update;
         if (id) change.id = id;
     }
+}
+
+export function tryUpdateConflicts(pendingChanges: PendingChange[], conflicts?: Record<string, Conflict>): Record<string, Conflict> | undefined {
+    if (!conflicts) return conflicts;
+
+    const newConflicts = { ...conflicts };
+
+    for (const change of pendingChanges) {
+        const conflict = newConflicts[change.localId];
+        if (conflict && change.changes) {
+            // Loop changed fields and update their old possibly stale value to the current local value
+            const newFields = conflict.fields.map((f) => {
+                if (f.key in change.changes) {
+                    return { ...f, localValue: change.changes[f.key] } as FieldConflict;
+                }
+                return f;
+            });
+
+            newConflicts[change.localId] = { stateKey: conflict.stateKey, fields: newFields };
+        }
+    }
+
+    return newConflicts;
 }
 
 export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>) {
@@ -147,4 +204,59 @@ export function findChanges(current: any[], updated: any[]): Map<string, ChangeR
     }
 
     return changesMap;
+}
+
+export function hasKeysOrUndefined(obj: any): any {
+    return Object.keys(obj).length === 0 ? undefined : obj;
+}
+
+export function hasConflicts(get: any, localId: string): boolean {
+    const state = get() as SyncState;
+    if (state.syncState.conflicts) {
+        return !!state.syncState.conflicts[localId];
+    }
+    return false;
+}
+
+export function resolveConflict(set: any, localId: string, keepLocalFields: boolean) {
+    set((state: any) => {
+        const syncState: SyncState['syncState'] = state.syncState || {};
+        const conflicts: Record<string, Conflict> = syncState.conflicts || {};
+        const conflict = conflicts[localId];
+        if (conflict) {
+            const items = state[conflict.stateKey];
+            const item = items.find((i: any) => i._localId === localId);
+            if (!item) {
+                return state;
+            }
+
+            const resolved: any = { ...item };
+            let pendingChanges = [...syncState.pendingChanges];
+
+            if (!keepLocalFields) {
+                // Use remote value(s)
+                for (const field of conflict.fields) {
+                    resolved[field.key] = field.remoteValue;
+                }
+
+                // Remove resolved pending change
+                pendingChanges = pendingChanges.filter((p) => !(p.stateKey === conflict.stateKey && p.localId === localId));
+            }
+
+            // Replace with resolved item
+            const nextItems = items.map((i: any) => (i._localId === localId ? resolved : i));
+            const nextConflicts = { ...conflicts };
+            delete nextConflicts[localId];
+
+            return {
+                [conflict.stateKey]: nextItems,
+                syncState: {
+                    ...syncState,
+                    pendingChanges,
+                    conflicts: hasKeysOrUndefined(nextConflicts),
+                },
+            };
+        }
+        return state;
+    });
 }

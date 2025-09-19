@@ -1,5 +1,5 @@
-import { removeFromPendingChanges, samePendingVersion, setPendingChangeToUpdate } from './helpers';
-import { nextLocalId, SyncAction } from './index';
+import { hasConflicts, removeFromPendingChanges, samePendingVersion, setPendingChangeToUpdate } from './helpers';
+import { createLocalId, SyncAction } from './index';
 import type { Logger } from './logger';
 import type {
     AfterRemoteAddCallback,
@@ -40,6 +40,11 @@ export async function pushOne(
             break;
 
         case SyncAction.Update: {
+            if (hasConflicts(get, change.localId)) {
+                logger.warn(`[zync] push:update:skipping-with-conflicts stateKey=${stateKey} localId=${localId} id=${id}`);
+                return;
+            }
+
             const exists = await api.update(id, changesClone);
             if (exists) {
                 logger.debug(`[zync] push:update:success stateKey=${stateKey} localId=${localId} id=${id}`);
@@ -68,7 +73,7 @@ export async function pushOne(
                     case 'insert-remote-record': {
                         const newItem = {
                             ...item,
-                            _localId: nextLocalId(),
+                            _localId: createLocalId(),
                             updated_at: new Date().toISOString(),
                         };
 

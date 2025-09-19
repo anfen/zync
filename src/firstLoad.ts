@@ -1,4 +1,4 @@
-import { findApi, nextLocalId } from './helpers';
+import { findApi, createLocalId } from './helpers';
 import type { Logger } from './logger';
 import type { ApiFunctions } from './types';
 
@@ -44,7 +44,7 @@ export async function startFirstLoad(set: any, syncApi: Record<string, ApiFuncti
                         } else {
                             next.push({
                                 ...remote,
-                                _localId: nextLocalId(),
+                                _localId: createLocalId(),
                             });
                         }
                     }

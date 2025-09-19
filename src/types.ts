@@ -20,7 +20,7 @@ export interface ApiFunctions {
 }
 
 export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
-export type ConflictResolutionStrategy = 'local-wins' | 'remote-wins';
+export type ConflictResolutionStrategy = 'client-wins' | 'server-wins' | 'try-shallow-merge';
 
 export type AfterRemoteAddCallback = (set: any, get: any, setAndSync: SetAndSyncCallback, stateKey: string, item: SyncedRecord) => void;
 
@@ -38,12 +38,12 @@ export interface SyncOptions {
 
 export type SyncState = {
     syncState: {
-        status: 'hydrating' | 'syncing' | 'idle';
-        error?: Error;
-        enabled: boolean;
+        status: 'disabled' | 'hydrating' | 'syncing' | 'idle';
         firstLoadDone: boolean;
         pendingChanges: PendingChange[];
         lastPulled: Record<string, string>;
+        error?: Error;
+        conflicts?: Record<string, Conflict>;
     };
 };
 
@@ -58,6 +58,7 @@ export interface PendingChange {
     id?: any;
     version: number;
     changes?: any;
+    current?: any; // Used during conflict resolution
 }
 
 export type UseStoreWithSync<T> = UseBoundStore<
@@ -65,6 +66,7 @@ export type UseStoreWithSync<T> = UseBoundStore<
         sync: {
             enable: (e: boolean) => void;
             startFirstLoad: () => Promise<void>;
+            resolveConflict: (localId: string, keepLocal: boolean) => void;
         };
         persist: {
             setOptions: (options: Partial<PersistOptions<T, any, any>>) => void;
@@ -77,3 +79,14 @@ export type UseStoreWithSync<T> = UseBoundStore<
         };
     }
 >;
+
+export interface Conflict {
+    stateKey: string;
+    fields: FieldConflict[];
+}
+
+export interface FieldConflict {
+    key: string;
+    localValue: any;
+    remoteValue: any;
+}

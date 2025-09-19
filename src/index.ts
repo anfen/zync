@@ -1,23 +1,23 @@
 import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
-import { orderFor, findApi, findChanges, tryAddToPendingChanges } from './helpers';
-import type {
-    ApiFunctions,
-    SyncOptions,
-    SyncState,
-    SyncedStateCreator,
-    PendingChange,
-    UseStoreWithSync,
-    MissingRemoteRecordStrategy,
-    ConflictResolutionStrategy,
+import { orderFor, findApi, findChanges, tryAddToPendingChanges, tryUpdateConflicts, resolveConflict, sleep } from './helpers';
+import {
+    type ApiFunctions,
+    type SyncOptions,
+    type SyncState,
+    type SyncedStateCreator,
+    type PendingChange,
+    type UseStoreWithSync,
+    type MissingRemoteRecordStrategy,
+    type ConflictResolutionStrategy,
 } from './types';
 import { pull } from './pull';
 import { pushOne } from './push';
 import { startFirstLoad } from './firstLoad';
 
 export { createIndexedDBStorage } from './indexedDBStorage';
-export { nextLocalId } from './helpers';
+export { createLocalId, changeKeysTo, changeKeysFrom } from './helpers';
 export type { ApiFunctions, UseStoreWithSync, SyncState } from './types';
 
 export enum SyncAction {
@@ -26,11 +26,11 @@ export enum SyncAction {
     Remove = 'remove',
 }
 
-const DEFAULT_SYNC_INTERVAL_MILLIS = 5000;
+const DEFAULT_SYNC_INTERVAL_MILLIS = 2000;
 const DEFAULT_LOGGER: Logger = console;
 const DEFAULT_MIN_LOG_LEVEL: LogLevel = 'debug';
 const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = 'ignore';
-const DEFAULT_CONFLICT_RESOLUTION_STRATEGY: ConflictResolutionStrategy = 'local-wins';
+const DEFAULT_CONFLICT_RESOLUTION_STRATEGY: ConflictResolutionStrategy = 'client-wins';
 
 export function createWithSync<TStore extends object>(
     stateCreator: SyncedStateCreator<TStore>,
@@ -86,6 +86,7 @@ export function persistWithSync<TStore extends object>(
                     firstLoadDone: syncState.firstLoadDone,
                     pendingChanges: syncState.pendingChanges,
                     lastPulled: syncState.lastPulled,
+                    conflicts: syncState.conflicts,
                 },
             };
         },
@@ -101,7 +102,7 @@ export function persistWithSync<TStore extends object>(
             return {
                 ...state,
                 syncState: {
-                    ...state.syncState,
+                    ...(state.syncState || {}),
                     status: 'idle', // this confirms 'hydrating' is done
                 },
             };
@@ -109,11 +110,10 @@ export function persistWithSync<TStore extends object>(
     };
 
     const creator: StateCreator<TStore & SyncState, [], []> = (set: any, get: any, storeApi: any) => {
-        let syncIntervalId: any;
+        let syncTimerStarted = false;
 
         async function syncOnce() {
-            const state: SyncState = get();
-            if (!state.syncState.enabled || state.syncState.status !== 'idle') return;
+            if (get().syncState.status !== 'idle') return;
 
             set((state: any) => ({
                 syncState: {
@@ -166,22 +166,8 @@ export function persistWithSync<TStore extends object>(
                     ...(state.syncState || {}),
                     status: 'idle',
                     error: firstSyncError,
-                },
+                } as SyncState['syncState'],
             }));
-
-            if (get().syncState.pendingChanges.length > 0 && !firstSyncError) {
-                // If there are pending changes and no sync error, we can sync again
-                await syncOnce();
-            }
-        }
-
-        function setAndSyncOnce(partial: any) {
-            if (typeof partial === 'function') {
-                set((state: any) => ({ ...partial(state) }));
-            } else {
-                set(partial);
-            }
-            syncOnce();
         }
 
         function setAndQueueToSync(partial: any) {
@@ -190,7 +176,6 @@ export function persistWithSync<TStore extends object>(
             } else {
                 set((state: any) => newSyncState(state, partial));
             }
-            syncOnce();
         }
 
         function newSyncState(state: any, partial: any) {
@@ -203,12 +188,16 @@ export function persistWithSync<TStore extends object>(
                 tryAddToPendingChanges(pendingChanges, stateKey, changes);
             });
 
+            // Prevent stale conflicts reporting old values to user
+            const conflicts = tryUpdateConflicts(pendingChanges, state.syncState.conflicts);
+
             return {
                 ...partial,
                 syncState: {
                     ...(state.syncState || {}),
                     pendingChanges,
-                },
+                    conflicts,
+                } as SyncState['syncState'],
             };
         }
 
@@ -216,20 +205,30 @@ export function persistWithSync<TStore extends object>(
             set((state: any) => ({
                 syncState: {
                     ...(state.syncState || {}),
-                    enabled,
+                    status: enabled ? 'idle' : 'disabled',
                 },
             }));
 
-            enableSyncTimer(enabled);
+            startSyncTimer(enabled);
             addVisibilityChangeListener(enabled);
         }
 
-        function enableSyncTimer(enabled: boolean) {
-            clearInterval(syncIntervalId);
-            syncIntervalId = undefined;
-            if (enabled) {
-                syncIntervalId = setInterval(syncOnce, syncInterval);
-                syncOnce();
+        function startSyncTimer(start: boolean) {
+            if (start) {
+                tryStart(); // Unawaited async
+            } else {
+                syncTimerStarted = false;
+            }
+        }
+
+        async function tryStart() {
+            if (syncTimerStarted) return;
+            syncTimerStarted = true;
+
+            while (true) {
+                if (!syncTimerStarted) break;
+                await syncOnce();
+                await sleep(syncInterval);
             }
         }
 
@@ -244,10 +243,10 @@ export function persistWithSync<TStore extends object>(
         function onVisibilityChange() {
             if (document.visibilityState === 'visible') {
                 logger.debug('[zync] sync:start-in-foreground');
-                enableSyncTimer(true);
+                startSyncTimer(true);
             } else {
                 logger.debug('[zync] sync:pause-in-background');
-                enableSyncTimer(false);
+                startSyncTimer(false);
             }
         }
 
@@ -255,9 +254,10 @@ export function persistWithSync<TStore extends object>(
         storeApi.sync = {
             enable,
             startFirstLoad: () => startFirstLoad(set, syncApi, logger),
+            resolveConflict: (localId: string, keepLocal: boolean) => resolveConflict(set, localId, keepLocal),
         };
 
-        const userState = stateCreator(setAndSyncOnce, get, setAndQueueToSync) as TStore;
+        const userState = stateCreator(set, get, setAndQueueToSync) as TStore;
 
         return {
             ...userState,
@@ -265,7 +265,7 @@ export function persistWithSync<TStore extends object>(
                 // set defaults
                 status: 'hydrating',
                 error: undefined,
-                enabled: false,
+                conflicts: undefined,
                 firstLoadDone: false,
                 pendingChanges: [],
                 lastPulled: {},

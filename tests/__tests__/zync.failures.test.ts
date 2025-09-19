@@ -233,7 +233,7 @@ describe.each(storageMatrix)('failure & slow scenarios (%s)', ({ make }) => {
         // allow background sync to start
         await wait(150);
         store.getState().addThing({ name: 'alpha' });
-        await wait(10);
+        await wait(50);
         store.getState().updateThing(store.getState().things[0]!._localId, { name: 'beta' });
         await wait(2000);
         // wait for server add to complete (slow add may be in-flight)

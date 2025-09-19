@@ -1,6 +1,6 @@
-import type { ApiFunctions, ConflictResolutionStrategy, PendingChange, SyncedRecord } from './types';
+import { type ApiFunctions, type FieldConflict, type ConflictResolutionStrategy, type SyncedRecord, type PendingChange } from './types';
 import { SyncAction } from './index';
-import { nextLocalId } from './helpers';
+import { createLocalId, hasKeysOrUndefined } from './helpers';
 import type { Logger } from './logger';
 
 export async function pull(set: any, get: any, stateKey: string, api: ApiFunctions, logger: Logger, conflictResolutionStrategy: ConflictResolutionStrategy) {
@@ -13,12 +13,15 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
     if (!serverData?.length) return;
 
     let newest = lastPulledAt;
+
     set((state: any) => {
-        const pendingChanges: PendingChange[] = state.syncState.pendingChanges || [];
+        let pendingChanges = [...(state.syncState.pendingChanges as PendingChange[])];
+        const conflicts = { ...state.syncState.conflicts };
         const localItems: any[] = state[stateKey] || [];
         let nextItems = [...localItems];
+
         const localById = new Map<any, any>(localItems.filter((l) => l.id).map((l) => [l.id, l]));
-        // prevent resurrecting deleted items by pulling them again
+        // prevent resurrecting deleted items when pulling them again
         const pendingRemovalById = new Set(pendingChanges.filter((p) => p.stateKey === stateKey && p.action === SyncAction.Remove).map((p) => p.id));
 
         for (const remote of serverData) {
@@ -45,52 +48,59 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
             if (localItem) {
                 const pendingChange = pendingChanges.find((p: any) => p.stateKey === stateKey && p.localId === localItem._localId);
                 if (pendingChange) {
-                    // TODO: Conflict resolution required
+                    logger.debug(`[zync] pull:conflict-strategy:${conflictResolutionStrategy} stateKey=${stateKey} id=${remote.id}`);
+
                     switch (conflictResolutionStrategy) {
-                        case 'local-wins':
+                        case 'client-wins':
                             // Ignore remote changes, keep local
-                            logger.debug(`[zync] pull:conflict-strategy:${conflictResolutionStrategy} stateKey=${stateKey} id=${remote.id}`);
                             break;
 
-                        case 'remote-wins': {
+                        case 'server-wins': {
                             // Ignore local changes, keep remote
-                            const merged = {
-                                ...remote,
-                                _localId: localItem._localId,
-                            };
+                            const merged = { ...remote, _localId: localItem._localId };
                             nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));
-                            logger.debug(`[zync] pull:conflict-strategy:${conflictResolutionStrategy} stateKey=${stateKey} id=${remote.id}`);
+                            // Remove pending change so it isn't pushed after pull
+                            pendingChanges = pendingChanges.filter((p) => !(p.stateKey === stateKey && p.localId === localItem._localId));
                             break;
                         }
 
-                        // case 'try-shallow-merge':
-                        //     // Try and merge all fields, fail if not possible due to conflicts
-                        //     // throw new ConflictError('Details...');
-                        //     break;
+                        case 'try-shallow-merge': {
+                            // List fields that local and remote have changed
+                            const changes = pendingChange.changes || {};
+                            const current = pendingChange.current || {};
+                            const fields: FieldConflict[] = Object.entries(changes)
+                                .filter(([k, localValue]) => k in current && k in remote && current[k] !== remote[k] && localValue !== remote[k])
+                                .map(([key, localValue]) => ({ key, localValue, remoteValue: remote[key] }));
 
-                        // case 'custom':
-                        //     // Hook to allow custom userland logic
-                        //     // const error = onConflict(localItem, remote, stateKey, pending);
-                        //     // logger.debug(`[zync] pull:conflict-strategy:${conflictResolutionStrategy} stateKey=${stateKey} id=${remote.id} error=${error}`);
-                        //     // if (error) throw new ConflictError(error);
-                        //     break;
+                            if (fields.length > 0) {
+                                logger.warn(`[zync] pull:${conflictResolutionStrategy}:conflicts-found`, JSON.stringify(fields, null, 4));
+                                conflicts[localItem._localId] = { stateKey, fields };
+                            } else {
+                                // No conflicts, merge remote into local but only preserve fields that were
+                                // actually changed locally
+                                const localChangedKeys = Object.keys(changes);
+                                const preservedLocal: any = { _localId: localItem._localId };
+                                for (const k of localChangedKeys) {
+                                    if (k in localItem) preservedLocal[k] = localItem[k];
+                                }
 
-                        default:
-                            logger.error(`[zync] pull:conflict-strategy:unknown stateKey=${stateKey} id=${remote.id} strategy=${conflictResolutionStrategy}`);
+                                const merged = { ...remote, ...preservedLocal };
+                                nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));
+                                // Merge now resolved, drop pending and conflict
+                                delete conflicts[localItem._localId];
+                            }
                             break;
+                        }
                     }
                 } else {
                     // No pending changes, merge remote into local
-                    const merged = {
-                        ...localItem,
-                        ...remote,
-                    };
+                    const merged = { ...localItem, ...remote };
                     nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));
                     logger.debug(`[zync] pull:merge-remote stateKey=${stateKey} id=${remote.id}`);
                 }
             } else {
                 // Add remote item (no local item)
-                nextItems = [...nextItems, { ...remote, _localId: nextLocalId() }];
+                nextItems = [...nextItems, { ...remote, _localId: createLocalId() }];
                 logger.debug(`[zync] pull:add stateKey=${stateKey} id=${remote.id}`);
             }
         }
@@ -99,6 +109,8 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
             [stateKey]: nextItems,
             syncState: {
                 ...(state.syncState || {}),
+                pendingChanges,
+                conflicts: hasKeysOrUndefined(conflicts),
                 lastPulled: {
                     ...(state.syncState.lastPulled || {}),
                     [stateKey]: newest.toISOString(),

@@ -4,7 +4,7 @@
 
 Simple, unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 
-**_STATUS_**: Actively developed in alpha stage while requirements are being understood. Api may change, requests are welcome.
+**_STATUS_**: Actively developed in beta stage. Core features are complete, Api is stable, requests are welcome.
 
 ## Benefits
 
@@ -12,33 +12,38 @@ Simple, unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 - **"It just works"** philosophy
 - Optimistic UI updates
 - Conflict resolution:
-    - 'local-wins' | 'remote-wins' _**(More in development)**_
+    - 'client-wins' | 'server-wins' | 'try-shallow-merge'
+    - 'try-shallow-merge' allows the user to choose between client and server changes if conflicts are found
 - Missing remote record during update strategy, to prevent accidental server deletion from losing client data:
     - 'ignore' | 'delete-local-record' | 'insert-remote-record'
 - Batteries optionally included:
-    - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb))
-    - UUID helper
+    - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb)): `createIndexedDBStorage()`
+    - UUID helper: `createLocalId()`
+    - Object|Array key rename helpers to map endpoint fields to Zync: `changeKeysFrom()` & `changeKeysTo()`
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
 - Zync's persistWithSync() is a drop-in replacement for Zustand's persist()
 - Allows for idiomatic use of Zustand
 - Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
 - Client or server assigned primary key, of any datatype
+- Fully tested on `localstorage` and `IndexedDB` (>80% code coverage)
+- Client schema migrations are a breeze using Zustand's [migrate](https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-through-versioning-and-migrations) hook
+- All Zync's internal state is accessible via the reactive `state.syncState` object
 
 ## Requirements
 
-- Client records will have a `_localId` field which is stable and never sent to the server. It is ideal for use as a key in JSX. The provided helper function `nextLocalId()` returns a UUID, but you could use any unique value
+- Client records will have a `_localId` field which is stable and never sent to the server. It is ideal for use as a key in JSX. The provided helper function `createLocalId()` returns a UUID, but you could use any unique value
 - Server records must have:
 
     - `id`: Any datatype, can be a server OR client assigned value
     - `updated_at`: Server assigned **_millisecond_** timestamp (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
     - `deleted`: Boolean, used for soft deletes, to allow other clients to download deleted records to keep their local records in sync
 
-    **_TIP: If your endpoint doesn't have the same names as the 3 fields above, you can map them in your `api.ts` file e.g. `deleted` -> `isDeleted`_**
+    **_TIP: If your endpoint doesn't have the same names as the 3 fields above, you can easily rename them in your `api.ts` file using the included `changeKeysFrom()` & `changeKeysTo()`_**
 
 ## Quickstart
 
 ```bash
-npm install @anfenn/zync
+npm install zustand @anfenn/zync
 ```
 
 _The example below uses server assigned id's, but you can just set the id when creating an object for client assigned id's._
@@ -66,7 +71,7 @@ export const useStore = create<any>()(
 
             facts: [],
             addFact: (item: Fact) => {
-                const updated_at = new Date().toISOString(); // Used as an optimistic UI update only, never sent to server
+                const updated_at = new Date().toISOString(); // Optimistic UI update only, never sent to server
                 const newItem = { ...item, created_at: updated_at, updated_at };
 
                 setAndSync((state: Store) => ({
@@ -108,9 +113,9 @@ export const useStore = create<any>()(
             // Triggered by the api.update() returning true or false confirming the existence of the remote record after an update
             missingRemoteRecordDuringUpdateStrategy: 'ignore',
 
-            // Options: 'local-wins' | 'remote-wins' (More coming soon)
-            // Default: 'local-wins'
-            conflictResolutionStrategy: 'local-wins',
+            // Options: 'client-wins' | 'server-wins' | 'try-shallow-merge'
+            // Default: 'try-shallow-merge' (Conflicts are listed in syncState.conflicts)
+            conflictResolutionStrategy: 'try-shallow-merge',
         },
     ),
 ) as UseStoreWithSync<Store>;
@@ -133,7 +138,7 @@ export const useFacts = () =>
 
 ```ts
 import { useEffect } from 'react';
-import { nextLocalId } from '@anfenn/zync';
+import { createLocalId } from '@anfenn/zync';
 import { useFacts, useStore } from './store';
 
 function App() {
@@ -142,17 +147,18 @@ function App() {
 
     // Zync's internal sync state
     const syncState = useStore((state) => state.syncState);
-    // syncState.status // 'hydrating' | 'syncing' | 'idle'
+    // syncState.status // 'disabled' | 'hydrating' | 'syncing' | 'idle'
     // syncState.error
-    // syncState.enabled
+    // syncState.conflicts
     // syncState.firstLoadDone
     // syncState.pendingChanges
     // syncState.lastPulled
 
     useEffect(() => {
         // Zync's control api
-        useStore.sync.enable(true);       // Defaults to false, enable to start syncing
-        //useStore.sync.startFirstLoad(); // Batch loads from server
+        useStore.sync.enable(true);                     // Defaults to false, enable to start syncing
+        //useStore.sync.startFirstLoad();               // Batch loads from server
+        //useStore.sync.resolveConflict(localId, true); // Keep client or server changes for specific record
     }, []);
 
     return (
@@ -161,7 +167,7 @@ function App() {
             <button
                 onClick={() =>
                     addFact({
-                        _localId: nextLocalId(),
+                        _localId: createLocalId(),
                         title: 'New fact ' + Date.now(),
                     })
                 }
@@ -189,9 +195,8 @@ import { supabase } from './supabase'; // Please include your own :)
 export type Fact = {
     _localId: string;
     fact: string;
-    // Server assigned fields
-    id?: number;
-    updated_at?: string;
+    id?: number; // Client OR server assigned
+    updated_at?: string; // Server assigned
 };
 
 export const factApi: ApiFunctions = { add, update, remove, list, firstLoad };
