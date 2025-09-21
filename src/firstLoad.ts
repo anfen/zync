@@ -1,4 +1,4 @@
-import { findApi, createLocalId } from './helpers';
+import { createLocalId } from './helpers';
 import type { Logger } from './logger';
 import type { ApiFunctions } from './types';
 
@@ -9,7 +9,12 @@ export async function startFirstLoad(set: any, syncApi: Record<string, ApiFuncti
         try {
             logger.info(`[zync] firstLoad:start stateKey=${stateKey}`);
 
-            const api = findApi(stateKey, syncApi);
+            const api = syncApi[stateKey];
+            if (!api?.firstLoad) {
+                logger.error(`[zync] firstLoad:no-api-function stateKey=${stateKey}`);
+                continue;
+            }
+
             let lastId; // Start as undefined to allow the userland api code to set the initial value+type
 
             // Batch until empty

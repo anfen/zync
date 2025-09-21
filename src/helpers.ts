@@ -151,7 +151,7 @@ export function tryUpdateConflicts(pendingChanges: PendingChange[], conflicts?: 
 
 export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>) {
     const api = syncApi[stateKey];
-    if (!api || !api.add || !api.update || !api.remove || !api.list || !api.firstLoad) {
+    if (!api || !api.add || !api.update || !api.remove || !api.list) {
         throw new Error(`Missing API function(s) for state key: ${stateKey}.`);
     }
     return api;
