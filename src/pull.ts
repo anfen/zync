@@ -51,11 +51,11 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                     logger.debug(`[zync] pull:conflict-strategy:${conflictResolutionStrategy} stateKey=${stateKey} id=${remote.id}`);
 
                     switch (conflictResolutionStrategy) {
-                        case 'client-wins':
+                        case 'local-wins':
                             // Ignore remote changes, keep local
                             break;
 
-                        case 'server-wins': {
+                        case 'remote-wins': {
                             // Ignore local changes, keep remote
                             const merged = { ...remote, _localId: localItem._localId };
                             nextItems = nextItems.map((i: any) => (i._localId === localItem._localId ? merged : i));

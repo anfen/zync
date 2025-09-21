@@ -20,7 +20,7 @@ export interface ApiFunctions {
 }
 
 export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
-export type ConflictResolutionStrategy = 'client-wins' | 'server-wins' | 'try-shallow-merge';
+export type ConflictResolutionStrategy = 'local-wins' | 'remote-wins' | 'try-shallow-merge';
 
 export type AfterRemoteAddCallback = (set: any, get: any, setAndSync: SetAndSyncCallback, stateKey: string, item: SyncedRecord) => void;
 

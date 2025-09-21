@@ -30,7 +30,7 @@ const DEFAULT_SYNC_INTERVAL_MILLIS = 2000;
 const DEFAULT_LOGGER: Logger = console;
 const DEFAULT_MIN_LOG_LEVEL: LogLevel = 'debug';
 const DEFAULT_MISSING_REMOTE_RECORD_STRATEGY: MissingRemoteRecordStrategy = 'ignore';
-const DEFAULT_CONFLICT_RESOLUTION_STRATEGY: ConflictResolutionStrategy = 'client-wins';
+const DEFAULT_CONFLICT_RESOLUTION_STRATEGY: ConflictResolutionStrategy = 'local-wins';
 
 export function createWithSync<TStore extends object>(
     stateCreator: SyncedStateCreator<TStore>,

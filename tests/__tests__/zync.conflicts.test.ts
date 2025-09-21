@@ -73,9 +73,9 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
         await new Promise((r) => setTimeout(r, ms));
     }
 
-    it('client-wins keeps local change when remote also modified', async () => {
+    it('local-wins keeps local change when remote also modified', async () => {
         const { apis, server } = buildApis();
-        const store = await buildStore(apis, make(), 'client-wins');
+        const store = await buildStore(apis, make(), 'local-wins');
 
         // seed server with item
         server.push({ id: 1, name: 'srv', updated_at: new Date().toISOString() });
@@ -101,14 +101,14 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
         await tick(200);
         store.sync.enable(false);
 
-        // client-wins => store should keep local-change
+        // local-wins => store should keep local-change
         const finalName = store.getState().items.find((i: any) => i._localId === localId)!.name;
         expect(finalName).toBe('local-change');
     });
 
-    it('server-wins overwrites local change when remote modified', async () => {
+    it('remote-wins overwrites local change when remote modified', async () => {
         const { apis, server } = buildApis();
-        const store = await buildStore(apis, make(), 'server-wins');
+        const store = await buildStore(apis, make(), 'remote-wins');
 
         // seed server with item
         server.push({ id: 1, name: 'srv', updated_at: new Date().toISOString() });

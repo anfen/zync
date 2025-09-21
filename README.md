@@ -12,30 +12,31 @@ Simple, unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 - **"It just works"** philosophy
 - Optimistic UI updates
 - Conflict resolution:
-    - 'client-wins' | 'server-wins' | 'try-shallow-merge'
-    - 'try-shallow-merge' allows the user to choose between client and server changes if conflicts are found
-- Missing remote record during update strategy, to prevent accidental server deletion from losing client data:
-    - 'ignore' | 'delete-local-record' | 'insert-remote-record'
+    - `'local-wins'` | `'remote-wins'` | `'try-shallow-merge'`
+    - `'try-shallow-merge'` allows the user to choose between local and remote changes if conflicts occur
+- Missing remote record during update strategy, to prevent accidental server deletion from losing local data:
+    - `'ignore'` | `'delete-local-record'` | `'insert-remote-record'`
 - Batteries optionally included:
     - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb)): `createIndexedDBStorage()`
     - UUID helper: `createLocalId()`
     - Object|Array key rename helpers to map endpoint fields to Zync: `changeKeysFrom()` & `changeKeysTo()`
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
-- Zync's persistWithSync() is a drop-in replacement for Zustand's persist()
+- Zync's `persistWithSync()` is a drop-in replacement for Zustand's `persist()`
 - Allows for idiomatic use of Zustand
-- Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide add(), update(), remove() and list()
+- Leaves the api requests up to you (RESTful, GraphQL, etc.), just provide `add()`, `update()`, `remove()` and `list()`
 - Client or server assigned primary key, of any datatype
-- Fully tested on `localstorage` and `IndexedDB` (>80% code coverage)
+- Fully tested on `localstorage` and `IndexedDB` (>80% code coverage, including stress tests)
 - Client schema migrations are a breeze using Zustand's [migrate](https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-through-versioning-and-migrations) hook
 - All Zync's internal state is accessible via the reactive `state.syncState` object
+- Zero boilerplate code
 
 ## Requirements
 
 - Client records will have a `_localId` field which is stable and never sent to the server. It is ideal for use as a key in JSX. The provided helper function `createLocalId()` returns a UUID, but you could use any unique value
 - Server records must have:
 
-    - `id`: Any datatype, can be a server OR client assigned value
-    - `updated_at`: Server assigned **_millisecond_** timestamp (db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
+    - `id`: Any datatype, can be client OR server assigned
+    - `updated_at`: Server assigned **_millisecond_** timestamp (e.g. via db trigger or api layer). The client will never send this as the client clock is unlikely to be in sync with the server, so is never used for change detection. If it has a higher precision than millisecond, like PostgreSQL's microsecond timestampz, updates could be ignored.
     - `deleted`: Boolean, used for soft deletes, to allow other clients to download deleted records to keep their local records in sync
 
     **_TIP: If your endpoint doesn't have the same names as the 3 fields above, you can easily rename them in your `api.ts` file using the included `changeKeysFrom()` & `changeKeysTo()`_**
@@ -113,7 +114,7 @@ export const useStore = create<any>()(
             // Triggered by the api.update() returning true or false confirming the existence of the remote record after an update
             missingRemoteRecordDuringUpdateStrategy: 'ignore',
 
-            // Options: 'client-wins' | 'server-wins' | 'try-shallow-merge'
+            // Options: 'local-wins' | 'remote-wins' | 'try-shallow-merge'
             // Default: 'try-shallow-merge' (Conflicts are listed in syncState.conflicts)
             conflictResolutionStrategy: 'try-shallow-merge',
         },
@@ -158,7 +159,7 @@ function App() {
         // Zync's control api
         useStore.sync.enable(true);                     // Defaults to false, enable to start syncing
         //useStore.sync.startFirstLoad();               // Batch loads from server
-        //useStore.sync.resolveConflict(localId, true); // Keep client or server changes for specific record
+        //useStore.sync.resolveConflict(localId, true); // Keep local or remote changes for a specific record
     }, []);
 
     return (
@@ -166,10 +167,7 @@ function App() {
             <div>Sync Status: {syncState.status}</div>
             <button
                 onClick={() =>
-                    addFact({
-                        _localId: createLocalId(),
-                        title: 'New fact ' + Date.now(),
-                    })
+                    addFact({ _localId: createLocalId(), title: 'Fact ' + Date.now() })
                 }
             >
                 Add Fact
@@ -270,7 +268,7 @@ async function firstLoad(lastId: any) {
 
 ## Optional IndexedDB storage
 
-Using async IndexedDB over sync localStorage gives the advantage of a responsive UI when reading/writing a very large store, as IndexedDB is running in it's own thread.
+Using **_async_** IndexedDB over **_sync_** localStorage gives the advantage of a responsive UI when reading/writing a very large store, as IndexedDB is running in it's own thread.
 
 If you want to use the bundled `createIndexedDBStorage()` helper, install `idb` in your project. It's intentionally optional so projects that don't use IndexedDB won't pull the dependency into their bundles.
 
@@ -280,7 +278,7 @@ If you want to use the bundled `createIndexedDBStorage()` helper, install `idb` 
 npm install idb
 ```
 
-When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like dexie.js instead of Zustand would be a better solution and provide the syntax for high performance queries.
+When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like `dexie.js` instead of Zustand would be a better solution and provide the syntax for high performance queries.
 
 From testing I've found Zustand and Zync are lightening fast even with 100,000 average sized state objects.
 
