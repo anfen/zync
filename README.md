@@ -17,7 +17,7 @@ Simple, unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 - Missing remote record during update strategy, to prevent accidental server deletion from losing local data:
     - `'ignore'` | `'delete-local-record'` | `'insert-remote-record'`
 - Batteries optionally included:
-    - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb)): `createIndexedDBStorage()`
+    - IndexedDB helper (based on [idb](https://www.npmjs.com/package/idb)): `createIndexedDB()`
     - UUID helper: `createLocalId()`
     - Object|Array key rename helpers to map endpoint fields to Zync: `changeKeysFrom()` & `changeKeysTo()`
 - Uses the official persist middleware as the local storage (localStorage, IndexedDB, etc.)
@@ -95,7 +95,7 @@ export const useStore = create<any>()(
 
             name: 'store',
             storage: createJSONStorage(() => localStorage),
-            // OR storage: createJSONStorage(() => createIndexedDBStorage('my-app', 'my-store')),
+            // OR storage: createJSONStorage(() => createIndexedDB('my-app', 'my-store')),
         },
         {
             // State-to-API map to enable syncing. Must implement the full CRUD API:
@@ -270,7 +270,7 @@ async function firstLoad(lastId: any) {
 
 Using **_async_** IndexedDB over **_sync_** localStorage gives the advantage of a responsive UI when reading/writing a very large store, as IndexedDB is running in it's own thread.
 
-If you want to use the bundled `createIndexedDBStorage()` helper, install `idb` in your project. It's intentionally optional so projects that don't use IndexedDB won't pull the dependency into their bundles.
+If you want to use the bundled `createIndexedDB()` helper, install `idb` in your project. It's intentionally optional so projects that don't use IndexedDB won't pull the dependency into their bundles.
 
 [idb](https://www.npmjs.com/package/idb) is an extremely popular and lightweight wrapper to simplify IndexedDB's verbose events based api into a simple Promise based one. It also handles the inconsistencies found when running in different browsers.
 

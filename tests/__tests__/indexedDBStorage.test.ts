@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { createIndexedDBStorage } from '../../src/indexedDBStorage';
+import { createIndexedDB } from '../../src/indexedDBStorage';
 
 // Basic smoke tests for the optional idb import behavior
 
-describe('createIndexedDBStorage', () => {
+describe('createIndexedDB', () => {
     it('throws helpful error when idb missing', async () => {
         // If idb is installed in this environment, skip this negative test because
         // we can't reliably force the dynamic import to fail when the real module exists.
@@ -21,7 +21,7 @@ describe('createIndexedDBStorage', () => {
             },
         }));
 
-        const st = createIndexedDBStorage('t', 's');
+        const st = createIndexedDB('t', 's');
         await expect(st.getItem('x')).rejects.toThrow(/Missing optional dependency "idb"/i);
 
         vi.unmock('idb');
@@ -29,7 +29,7 @@ describe('createIndexedDBStorage', () => {
 
     it('returns storage object when idb present (dev environment)', async () => {
         try {
-            const st = createIndexedDBStorage('test-db', 's');
+            const st = createIndexedDB('test-db', 's');
             expect(st).toHaveProperty('getItem');
             expect(st).toHaveProperty('setItem');
             expect(st).toHaveProperty('removeItem');

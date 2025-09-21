@@ -1,6 +1,6 @@
 import type { IDBPDatabase } from 'idb';
 
-export function createIndexedDBStorage(dbName: string, storeName: string) {
+export function createIndexedDB(dbName: string, storeName: string) {
     // dbPromise is created lazily by initDB() to avoid pulling `idb` into bundles
     let dbPromise: Promise<IDBPDatabase<any>> | null = null;
 

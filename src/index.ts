@@ -16,7 +16,7 @@ import { pull } from './pull';
 import { pushOne } from './push';
 import { startFirstLoad } from './firstLoad';
 
-export { createIndexedDBStorage } from './indexedDBStorage';
+export { createIndexedDB } from './indexedDBStorage';
 export { createLocalId, changeKeysTo, changeKeysFrom } from './helpers';
 export type { ApiFunctions, UseStoreWithSync, SyncState } from './types';
 

@@ -1,4 +1,4 @@
-import { createIndexedDBStorage } from '../../src/indexedDBStorage';
+import { createIndexedDB } from '../../src/indexedDBStorage';
 import { createJSONStorage } from 'zustand/middleware';
 
 export type TestStorageFactory = {
@@ -33,7 +33,7 @@ export const storageMatrix: TestStorageFactory[] = [
             // storing non-serializable values (functions) which fake-indexeddb
             // enforces via the structured clone algorithm.
             return createJSONStorage(() =>
-                createIndexedDBStorage(
+                createIndexedDB(
                     // Use a unique DB name per test-run to avoid cross-test
                     // IndexedDB version/upgrade contention when multiple tests
                     // open the same DB with different object store names.
