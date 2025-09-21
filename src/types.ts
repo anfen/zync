@@ -16,7 +16,7 @@ export interface ApiFunctions {
     update: (id: any, changes: any) => Promise<boolean>;
     remove: (id: any) => Promise<void>;
     list: (lastUpdatedAt: Date) => Promise<any[]>;
-    firstLoad: (lastId: any) => Promise<any[]>;
+    firstLoad?: (lastId: any) => Promise<any[]>;
 }
 
 export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
