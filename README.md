@@ -95,7 +95,7 @@ export const useStore = create<any>()(
 
             name: 'store',
             storage: createJSONStorage(() => localStorage),
-            // OR storage: createJSONStorage(() => createIndexedDBStorage({ dbName: 'my-app', storeName: 'store' })),
+            // OR storage: createJSONStorage(() => createIndexedDBStorage('my-app', 'my-store')),
         },
         {
             // State-to-API map to enable syncing. Must implement the full CRUD API:

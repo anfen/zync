@@ -33,13 +33,13 @@ export const storageMatrix: TestStorageFactory[] = [
             // storing non-serializable values (functions) which fake-indexeddb
             // enforces via the structured clone algorithm.
             return createJSONStorage(() =>
-                createIndexedDBStorage({
+                createIndexedDBStorage(
                     // Use a unique DB name per test-run to avoid cross-test
                     // IndexedDB version/upgrade contention when multiple tests
                     // open the same DB with different object store names.
-                    dbName: `test-db-${Math.random().toString(36).slice(2)}`,
-                    storeName: `store-${Math.random().toString(36).slice(2)}`,
-                }),
+                    `test-db-${Math.random().toString(36).slice(2)}`,
+                    `store-${Math.random().toString(36).slice(2)}`,
+                ),
             )!;
         },
     },

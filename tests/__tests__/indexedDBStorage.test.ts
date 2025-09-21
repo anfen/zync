@@ -21,7 +21,7 @@ describe('createIndexedDBStorage', () => {
             },
         }));
 
-        const st = createIndexedDBStorage({ dbName: 't', storeName: 's' });
+        const st = createIndexedDBStorage('t', 's');
         await expect(st.getItem('x')).rejects.toThrow(/Missing optional dependency "idb"/i);
 
         vi.unmock('idb');
@@ -29,7 +29,7 @@ describe('createIndexedDBStorage', () => {
 
     it('returns storage object when idb present (dev environment)', async () => {
         try {
-            const st = createIndexedDBStorage({ dbName: 'test-db', storeName: 's' });
+            const st = createIndexedDBStorage('test-db', 's');
             expect(st).toHaveProperty('getItem');
             expect(st).toHaveProperty('setItem');
             expect(st).toHaveProperty('removeItem');
