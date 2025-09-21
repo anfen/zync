@@ -58,7 +58,7 @@ export interface PendingChange {
     id?: any;
     version: number;
     changes?: any;
-    current?: any; // Used during conflict resolution
+    before?: any; // Used during conflict resolution
 }
 
 export type UseStoreWithSync<T> = UseBoundStore<

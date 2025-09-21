@@ -1,4 +1,4 @@
-import { hasConflicts, removeFromPendingChanges, samePendingVersion, setPendingChangeToUpdate } from './helpers';
+import { hasConflicts, removeFromPendingChanges, samePendingVersion, setPendingChangeBefore, setPendingChangeToUpdate } from './helpers';
 import { createLocalId, SyncAction } from './index';
 import type { Logger } from './logger';
 import type {
@@ -24,7 +24,6 @@ export async function pushOne(
     logger.debug(`[zync] push:attempt action=${change.action} stateKey=${change.stateKey} localId=${change.localId}`);
 
     const { action, stateKey, localId, id, version, changes } = change;
-    const changesClone = { ...changes }; // TODO: Test if needed
 
     switch (action) {
         case SyncAction.Remove:
@@ -45,11 +44,14 @@ export async function pushOne(
                 return;
             }
 
-            const exists = await api.update(id, changesClone);
+            const exists = await api.update(id, changes);
             if (exists) {
                 logger.debug(`[zync] push:update:success stateKey=${stateKey} localId=${localId} id=${id}`);
                 if (samePendingVersion(get, stateKey, localId, version)) {
                     removeFromPendingChanges(set, localId, stateKey);
+                } else {
+                    // Item changed during request, ensure pending.before is not stale for conflict resolution
+                    setPendingChangeBefore(get, stateKey, localId, changes);
                 }
                 return;
             } else {
@@ -103,7 +105,7 @@ export async function pushOne(
         }
 
         case SyncAction.Create: {
-            const result = await api.add(changesClone);
+            const result = await api.add(changes);
             if (result) {
                 logger.debug(`[zync] push:create:success stateKey=${stateKey} localId=${localId} id=${id}`);
 

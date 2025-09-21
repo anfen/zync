@@ -67,9 +67,9 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                         case 'try-shallow-merge': {
                             // List fields that local and remote have changed
                             const changes = pendingChange.changes || {};
-                            const current = pendingChange.current || {};
+                            const before = pendingChange.before || {};
                             const fields: FieldConflict[] = Object.entries(changes)
-                                .filter(([k, localValue]) => k in current && k in remote && current[k] !== remote[k] && localValue !== remote[k])
+                                .filter(([k, localValue]) => k in before && k in remote && before[k] !== remote[k] && localValue !== remote[k])
                                 .map(([key, localValue]) => ({ key, localValue, remoteValue: remote[key] }));
 
                             if (fields.length > 0) {

@@ -103,7 +103,7 @@ export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey
                 queueItem.changes = { ...queueItem.changes, ...omittedItem };
             }
         } else if (action === SyncAction.Remove || hasChanges) {
-            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem, current: omitSyncFields(change.currentItem) });
+            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem, before: omitSyncFields(change.currentItem) });
         }
     }
 }
@@ -115,6 +115,14 @@ export function setPendingChangeToUpdate(get: any, stateKey: string, localId: st
     if (change) {
         change.action = SyncAction.Update;
         if (id) change.id = id;
+    }
+}
+
+export function setPendingChangeBefore(get: any, stateKey: string, localId: string, before: any) {
+    const pendingChanges: PendingChange[] = get().syncState.pendingChanges || [];
+    const change = pendingChanges.find((p) => p.stateKey === stateKey && p.localId === localId);
+    if (change) {
+        change.before = { ...change.before, ...before };
     }
 }
 

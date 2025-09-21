@@ -156,7 +156,7 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
             syncState: {
                 ...(store.getState().syncState || {}),
                 pendingChanges: [
-                    { action: 'update', stateKey: 'items', localId, id: 1, version: 1, changes: { name: 'local-change' }, current: { name: 'srv' } },
+                    { action: 'update', stateKey: 'items', localId, id: 1, version: 1, changes: { name: 'local-change' }, before: { name: 'srv' } },
                 ],
             },
         });
@@ -208,7 +208,7 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
                         id: 1,
                         version: 1,
                         changes: { name: 'local-change' },
-                        current: { name: 'srv', extra: 'x' },
+                        before: { name: 'srv', extra: 'x' },
                     },
                 ],
             },
