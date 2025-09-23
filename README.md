@@ -4,7 +4,14 @@
 
 Simple, unopinionated, bullet-proof, offline-first sync middleware for Zustand.
 
-**_STATUS_**: Actively developed in beta stage. Core features are complete, Api is stable, requests are welcome.
+## Use Case
+
+Zync is when you want to persist and sync small amounts of state in a website or PWA. It's ideal if you know you'll never need the power of
+sqlite or the complexity of DB schemas and relationships, and it keeps your components free from wiring-up code and allows you to use pure JS to select/sort/mutate your state.
+
+The tradeoff however is although Zustand can use IndexedDB, it will store all state in one key, and so load it all into the JS VM.
+
+When you need sqlite, or you know the client will need large amounts of data, [WatermelondDB](https://github.com/nozbe/WatermelonDB) is what you want. This will however require a backend that provides the PUSH/PULL endpoints for synchronising or perhaps modifying the frontend to redirect those requests to and from specific endpoints.
 
 ## Benefits
 
@@ -277,10 +284,6 @@ If you want to use the bundled `createIndexedDB()` helper, install `idb` in your
 ```bash
 npm install idb
 ```
-
-When using IndexedDB Zustand saves the whole store under one key, which means indexes cannot be used to accelerate querying. However, if this becomes a performance issue due to the size of the store, then libraries like `dexie.js` instead of Zustand would be a better solution and provide the syntax for high performance queries.
-
-From testing I've found Zustand and Zync are lightening fast even with 100,000 average sized state objects.
 
 ## Community
 
