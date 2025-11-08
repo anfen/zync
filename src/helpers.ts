@@ -1,5 +1,5 @@
 import { SyncAction } from './index';
-import type { ApiFunctions, Conflict, FieldConflict, PendingChange, SyncState } from './types';
+import type { ApiConfig, ApiFunctions, Conflict, FieldConflict, PendingChange, SyncState } from './types';
 
 const SYNC_FIELDS = ['_localId', 'updated_at', 'deleted'] as const;
 
@@ -78,14 +78,16 @@ export function removeFromPendingChanges(set: any, localId: string, stateKey: st
 
 export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey: string, changes: Map<string, ChangeRecord>) {
     for (const [localId, change] of changes) {
-        let omittedItem = omitSyncFields(change.changes);
+        let omittedChanges = omitSyncFields(change.changes);
+        const omittedCurrentItem = omitSyncFields(change.currentItem);
+        const omittedUpdatedItem = omitSyncFields(change.updatedItem);
         const queueItem = pendingChanges.find((p) => p.localId === localId && p.stateKey === stateKey);
-        const hasChanges = Object.keys(omittedItem).length > 0;
+        const hasChanges = Object.keys(omittedChanges).length > 0;
         const action = change.updatedItem === null ? SyncAction.Remove : change.currentItem === null ? SyncAction.Create : SyncAction.Update;
 
         if (action === SyncAction.Update && change.updatedItem && change.currentItem && change.currentItem._localId !== change.updatedItem._localId) {
             // Here when insert-remote-record swaps local remotely deleted item with a fresh copy to push up
-            omittedItem = omitSyncFields(change.updatedItem);
+            omittedChanges = omittedUpdatedItem;
         }
 
         if (queueItem) {
@@ -100,10 +102,20 @@ export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey
                 queueItem.action = SyncAction.Remove;
             } else if (hasChanges) {
                 // Never change the action here, it stays Create or Update and is removed when synced
-                queueItem.changes = { ...queueItem.changes, ...omittedItem };
+                queueItem.changes = { ...queueItem.changes, ...omittedChanges };
+                queueItem.after = { ...queueItem.after, ...omittedUpdatedItem };
             }
         } else if (action === SyncAction.Remove || hasChanges) {
-            pendingChanges.push({ action, stateKey, localId, id: change.id, version: 1, changes: omittedItem, before: omitSyncFields(change.currentItem) });
+            pendingChanges.push({
+                action,
+                stateKey,
+                localId,
+                id: change.id,
+                version: 1,
+                changes: omittedChanges,
+                before: omittedCurrentItem,
+                after: omittedUpdatedItem,
+            });
         }
     }
 }
@@ -149,12 +161,23 @@ export function tryUpdateConflicts(pendingChanges: PendingChange[], conflicts?: 
     return newConflicts;
 }
 
-export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>) {
+export function findApi(stateKey: string, syncApi: Record<string, ApiFunctions>): ApiFunctions {
     const api = syncApi[stateKey];
     if (!api || !api.add || !api.update || !api.remove || !api.list) {
         throw new Error(`Missing API function(s) for state key: ${stateKey}.`);
     }
+
     return api;
+}
+
+export function isPullIntervalNow(stateKey: string, apiConfig: Record<string, ApiConfig>, lastPulled: SyncState['syncState']['lastPulled']): boolean {
+    const config = apiConfig[stateKey];
+    if (!config || !config.pullInterval) {
+        return true;
+    }
+
+    const lastPulledTime = new Date(lastPulled[stateKey] ?? 0).getTime();
+    return Date.now() > lastPulledTime + config.pullInterval;
 }
 
 type ChangeRecord = {

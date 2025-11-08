@@ -108,7 +108,7 @@ export const useStore = create<any>()(
             // State-to-API map to enable syncing. Must implement the full CRUD API:
             //
             // add: (item: any) => Promise<any | undefined>
-            // update: (id: any, changes: any) => Promise<boolean>
+            // update: (id: any, changes: any, item: any) => Promise<boolean>
             // remove: (id: any) => Promise<void>
             // list: (lastUpdatedAt: Date) => Promise<any[]>
             // firstLoad: (lastId: any) => Promise<any[]> (Optional)
@@ -116,9 +116,17 @@ export const useStore = create<any>()(
             facts: factApi,
         },
         {
+            // Default: 2000 (ms)
+            syncInterval: 2000,
+
+            // Default: undefined (ms)
+            // Override syncInterval above for just pull requests, per api (Push requests are still controlled by syncInterval)
+            // Has no effect if less than syncInterval
+            apiConfig: { facts: { pullInterval: 10000 } },
+
             // Options: 'ignore' | 'delete-local-record' | 'insert-remote-record'
             // Default: 'ignore'
-            // Triggered by the api.update() returning true or false confirming the existence of the remote record after an update
+            // Triggered by api.update() returning false confirming the absence of the remote record
             missingRemoteRecordDuringUpdateStrategy: 'ignore',
 
             // Options: 'local-wins' | 'remote-wins' | 'try-shallow-merge'
@@ -160,6 +168,7 @@ function App() {
     // syncState.conflicts
     // syncState.firstLoadDone
     // syncState.pendingChanges
+    // syncState.lastUpdatedAt
     // syncState.lastPulled
 
     useEffect(() => {
@@ -220,7 +229,7 @@ async function add(item: any): Promise<any | undefined> {
     }
 }
 
-async function update(id: number, changes: any): Promise<boolean> {
+async function update(id: number, changes: any, item: any): Promise<boolean> {
     const { status, statusText, data } = await supabase.from('fact').update(changes).eq('id', id).select();
 
     if (status !== 200) {

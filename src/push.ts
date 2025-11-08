@@ -23,7 +23,7 @@ export async function pushOne(
 ) {
     logger.debug(`[zync] push:attempt action=${change.action} stateKey=${change.stateKey} localId=${change.localId}`);
 
-    const { action, stateKey, localId, id, version, changes } = change;
+    const { action, stateKey, localId, id, version, changes, after } = change;
 
     switch (action) {
         case SyncAction.Remove:
@@ -44,7 +44,7 @@ export async function pushOne(
                 return;
             }
 
-            const exists = await api.update(id, changes);
+            const exists = await api.update(id, changes, after);
             if (exists) {
                 logger.debug(`[zync] push:update:success stateKey=${stateKey} localId=${localId} id=${id}`);
                 if (samePendingVersion(get, stateKey, localId, version)) {

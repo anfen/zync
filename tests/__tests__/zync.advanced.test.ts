@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createWithSync } from '../../src/index';
+import type { SyncOptions } from '../../src/types';
 import { storageMatrix } from '../helpers/storageMatrix';
 
 import { installDeterministicUUID, resetDeterministicUUID } from '../helpers/testUtils';
@@ -31,12 +32,17 @@ function buildApis() {
     let idCounter = 0;
     const server: ServerRecord[] = [];
     const latency = 5;
+    const addCallTimes: number[] = [];
+    const listCallTimes: number[] = [];
     return {
         server,
+        addCallTimes,
+        listCallTimes,
         apis: {
             items: {
                 add: vi.fn(async (item: any) => {
                     await new Promise((r) => setTimeout(r, latency));
+                    addCallTimes.push(Date.now());
                     const rec = {
                         id: ++idCounter,
                         ...item,
@@ -63,6 +69,7 @@ function buildApis() {
                 }),
                 list: vi.fn(async (lastUpdatedAt: Date) => {
                     await new Promise((r) => setTimeout(r, latency));
+                    listCallTimes.push(Date.now());
                     return server.filter((r) => new Date(r.updated_at) > lastUpdatedAt);
                 }),
                 firstLoad: vi.fn(async (_lastId: any) => []),
@@ -71,7 +78,12 @@ function buildApis() {
     } as const;
 }
 
-function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any = 'none') {
+function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any = 'none', extraOptions: Partial<SyncOptions> = {}) {
+    const options: SyncOptions = {
+        syncInterval,
+        minLogLevel,
+        ...extraOptions,
+    };
     return createWithSync<StoreState>(
         (_set, get, setAndSync) => ({
             items: [],
@@ -101,7 +113,7 @@ function buildStore(apis: any, storage: any, syncInterval = 40, minLogLevel: any
         }),
         { name: 'adv-store', storage },
         apis,
-        { syncInterval, minLogLevel },
+        options,
         //),
     ); // as UseStoreWithSync<StoreState>;
 }
@@ -213,6 +225,64 @@ describe.each(storageMatrix)('advanced sync scenarios (%s)', ({ make }) => {
         store.sync.enable(false);
         expect(names).toContain('srv1-new');
         expect(names).not.toContain('srv2');
+    });
+
+    it('respects global sync interval between sync cycles', async () => {
+        const syncInterval = 300;
+        const { apis, listCallTimes } = buildApis();
+        const store = await buildStore(apis, make(), syncInterval, 'none');
+
+        try {
+            store.sync.enable(true);
+            store.getState().addItem('interval-test');
+
+            await waitUntil(() => listCallTimes.length >= 2, 2000);
+
+            const firstGap = listCallTimes[1]! - listCallTimes[0]!;
+            expect(firstGap).toBeGreaterThanOrEqual(syncInterval);
+
+            const baselineListCalls = listCallTimes.length;
+            await tick(Math.floor(syncInterval / 2));
+            expect(listCallTimes.length).toBe(baselineListCalls);
+
+            await waitUntil(() => listCallTimes.length > baselineListCalls, syncInterval + 1000);
+            const lastIndex = listCallTimes.length - 1;
+            const nextGap = listCallTimes[lastIndex]! - listCallTimes[lastIndex - 1]!;
+            expect(nextGap).toBeGreaterThanOrEqual(syncInterval);
+        } finally {
+            store.sync.enable(false);
+        }
+    });
+
+    it('overrides global sync interval with apiConfig override', async () => {
+        const globalInterval = 80;
+        const overrideInterval = 400;
+        const { apis, listCallTimes } = buildApis();
+        const store = await buildStore(apis, make(), globalInterval, 'none', {
+            apiConfig: {
+                items: {
+                    pullInterval: overrideInterval,
+                },
+            },
+        });
+
+        try {
+            store.sync.enable(true);
+
+            await waitUntil(() => listCallTimes.length >= 1, 1500);
+
+            const firstTimestamp = listCallTimes[0]!;
+            await waitUntil(() => listCallTimes.length >= 2, overrideInterval + 1200);
+            const secondTimestamp = listCallTimes[1]!;
+
+            expect(secondTimestamp - firstTimestamp).toBeGreaterThanOrEqual(overrideInterval);
+
+            const baselineListCalls = listCallTimes.length;
+            await tick(Math.floor(globalInterval * 1.5));
+            expect(listCallTimes.length).toBe(baselineListCalls);
+        } finally {
+            store.sync.enable(false);
+        }
     });
 
     it('throws errors from API functions and surfaces via syncState.error', async () => {

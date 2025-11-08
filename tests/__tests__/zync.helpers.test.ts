@@ -165,7 +165,8 @@ describe('helpers', () => {
             list: async (_d: Date) => [],
             firstLoad: async (_d: any) => [],
         };
-        expect(findApi('a', { a: ok })).toBe(ok as any);
+        const api = findApi('a', { a: ok });
+        expect(api).toBe(ok as any);
         expect(() => findApi('b', { a: ok as any })).toThrow();
     });
 

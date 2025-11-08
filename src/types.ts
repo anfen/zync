@@ -13,7 +13,7 @@ export type SyncedRecord = {
 
 export interface ApiFunctions {
     add: (item: any) => Promise<any | undefined>;
-    update: (id: any, changes: any) => Promise<boolean>;
+    update: (id: any, changes: any, item: any) => Promise<boolean>;
     remove: (id: any) => Promise<void>;
     list: (lastUpdatedAt: Date) => Promise<any[]>;
     firstLoad?: (lastId: any) => Promise<any[]>;
@@ -22,12 +22,17 @@ export interface ApiFunctions {
 export type MissingRemoteRecordStrategy = 'ignore' | 'delete-local-record' | 'insert-remote-record';
 export type ConflictResolutionStrategy = 'local-wins' | 'remote-wins' | 'try-shallow-merge';
 
+export type SetAndSyncCallback = (state: any) => void;
 export type AfterRemoteAddCallback = (set: any, get: any, setAndSync: SetAndSyncCallback, stateKey: string, item: SyncedRecord) => void;
-
 export type MissingRemoteRecordDuringUpdateCallback = (strategy: MissingRemoteRecordStrategy, item: SyncedRecord) => void;
+
+type ApiName = string;
+type LocalId = string;
+type ISODateString = string;
 
 export interface SyncOptions {
     syncInterval?: number;
+    apiConfig?: Record<ApiName, ApiConfig>;
     logger?: any;
     minLogLevel?: LogLevel;
     onAfterRemoteAdd?: AfterRemoteAddCallback;
@@ -36,18 +41,21 @@ export interface SyncOptions {
     conflictResolutionStrategy?: ConflictResolutionStrategy;
 }
 
+export type ApiConfig = {
+    pullInterval?: number;
+};
+
 export type SyncState = {
     syncState: {
         status: 'disabled' | 'hydrating' | 'syncing' | 'idle';
         firstLoadDone: boolean;
         pendingChanges: PendingChange[];
-        lastPulled: Record<string, string>;
+        lastUpdatedAt: Record<ApiName, ISODateString>;
+        lastPulled: Record<ApiName, ISODateString>;
         error?: Error;
-        conflicts?: Record<string, Conflict>;
+        conflicts?: Record<LocalId, Conflict>;
     };
 };
-
-export type SetAndSyncCallback = (state: any) => void;
 
 export type SyncedStateCreator<TStore> = (set: any, get: any, setAndSyncOnce: SetAndSyncCallback) => TStore;
 
@@ -59,6 +67,7 @@ export interface PendingChange {
     version: number;
     changes?: any;
     before?: any; // Used during conflict resolution
+    after?: any; // Used to provide ApiFunctions.update() with full changed object
 }
 
 export type UseStoreWithSync<T> = UseBoundStore<

@@ -93,7 +93,7 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
         srv.name = 'remote-change';
         srv.updated_at = new Date(Date.now() + 20).toISOString();
 
-        // ensure server updated_at is later than lastPulled
+        // ensure server updated_at is later than lastUpdatedAt
         await tick(40);
 
         // resume sync to let pull run with a pending local change
@@ -188,7 +188,7 @@ describe.each(storageMatrix)('conflict resolution (%s)', ({ make }) => {
         const { apis, server } = buildApis();
         const store = await buildStore(apis, make(), 'try-shallow-merge');
 
-        // seed server with an older timestamp so the later remote update is definitely newer than lastPulled
+        // seed server with an older timestamp so the later remote update is definitely newer than lastUpdatedAt
         server.push({ id: 1, name: 'srv', updated_at: new Date(Date.now() - 10000).toISOString(), extra: 'x' });
 
         store.sync.enable(true);

@@ -27,7 +27,7 @@ export async function startFirstLoad(set: any, syncApi: Record<string, ApiFuncti
                     const local: any[] = state[stateKey] || [];
                     const localById = new Map<any, any>(local.filter((l) => l.id).map((l) => [l.id, l]));
 
-                    let newest = new Date(state.syncState.lastPulled[stateKey] || 0);
+                    let newest = new Date(state.syncState.lastUpdatedAt[stateKey] || 0);
                     const next = [...local];
                     for (const remote of batch) {
                         const remoteUpdated = new Date(remote.updated_at || 0);
@@ -58,8 +58,8 @@ export async function startFirstLoad(set: any, syncApi: Record<string, ApiFuncti
                         [stateKey]: next,
                         syncState: {
                             ...(state.syncState || {}),
-                            lastPulled: {
-                                ...(state.syncState.lastPulled || {}),
+                            lastUpdatedAt: {
+                                ...(state.syncState.lastUpdatedAt || {}),
                                 [stateKey]: newest.toISOString(),
                             },
                         },

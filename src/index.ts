@@ -1,7 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newLogger, type Logger, type LogLevel } from './logger';
-import { orderFor, findApi, findChanges, tryAddToPendingChanges, tryUpdateConflicts, resolveConflict, sleep } from './helpers';
+import { orderFor, findApi, findChanges, tryAddToPendingChanges, tryUpdateConflicts, resolveConflict, sleep, isPullIntervalNow } from './helpers';
 import {
     type ApiFunctions,
     type SyncOptions,
@@ -54,6 +54,7 @@ export function persistWithSync<TStore extends object>(
     syncOptions: SyncOptions = {},
 ) {
     const syncInterval = syncOptions.syncInterval ?? DEFAULT_SYNC_INTERVAL_MILLIS;
+    const apiConfig = syncOptions.apiConfig ?? {};
     const missingStrategy = syncOptions.missingRemoteRecordDuringUpdateStrategy ?? DEFAULT_MISSING_REMOTE_RECORD_STRATEGY;
     const conflictResolutionStrategy = syncOptions.conflictResolutionStrategy ?? DEFAULT_CONFLICT_RESOLUTION_STRATEGY;
     const logger = newLogger(syncOptions.logger ?? DEFAULT_LOGGER, syncOptions.minLogLevel ?? DEFAULT_MIN_LOG_LEVEL);
@@ -85,6 +86,7 @@ export function persistWithSync<TStore extends object>(
                 syncState: {
                     firstLoadDone: syncState.firstLoadDone,
                     pendingChanges: syncState.pendingChanges,
+                    lastUpdatedAt: syncState.lastUpdatedAt,
                     lastPulled: syncState.lastPulled,
                     conflicts: syncState.conflicts,
                 },
@@ -123,12 +125,16 @@ export function persistWithSync<TStore extends object>(
             }));
 
             let firstSyncError: Error | undefined;
+            const lastPulled: SyncState['syncState']['lastPulled'] = { ...get().syncState.lastPulled };
 
             // 1) PULL for each stateKey
             for (const stateKey of Object.keys(syncApi)) {
                 try {
+                    if (!isPullIntervalNow(stateKey, apiConfig, lastPulled)) continue;
+
                     const api = findApi(stateKey, syncApi);
                     await pull(set, get, stateKey, api, logger, conflictResolutionStrategy);
+                    lastPulled[stateKey] = new Date().toISOString();
                 } catch (err) {
                     firstSyncError = firstSyncError ?? (err as Error);
                     logger.error(`[zync] pull:error stateKey=${stateKey}`, err);
@@ -166,6 +172,7 @@ export function persistWithSync<TStore extends object>(
                     ...(state.syncState || {}),
                     status: 'idle',
                     error: firstSyncError,
+                    lastPulled,
                 } as SyncState['syncState'],
             }));
         }
@@ -268,6 +275,7 @@ export function persistWithSync<TStore extends object>(
                 conflicts: undefined,
                 firstLoadDone: false,
                 pendingChanges: [],
+                lastUpdatedAt: {},
                 lastPulled: {},
             },
         } as TStore & SyncState;

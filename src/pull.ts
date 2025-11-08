@@ -1,18 +1,16 @@
-import { type ApiFunctions, type FieldConflict, type ConflictResolutionStrategy, type SyncedRecord, type PendingChange } from './types';
+import { type ApiFunctions, type FieldConflict, type ConflictResolutionStrategy, type SyncedRecord, type PendingChange, type SyncState } from './types';
 import { SyncAction } from './index';
 import { createLocalId, hasKeysOrUndefined } from './helpers';
 import type { Logger } from './logger';
 
 export async function pull(set: any, get: any, stateKey: string, api: ApiFunctions, logger: Logger, conflictResolutionStrategy: ConflictResolutionStrategy) {
-    const lastPulled: Record<string, string> = get().syncState.lastPulled || {};
-    const lastPulledAt = new Date(lastPulled[stateKey] || new Date(0));
+    const lastUpdatedAt: SyncState['syncState']['lastUpdatedAt'] = get().syncState.lastUpdatedAt || {};
+    let lastUpdatedAtDate = new Date(lastUpdatedAt[stateKey] || new Date(0));
 
-    logger.debug(`[zync] pull:start stateKey=${stateKey} since=${lastPulledAt.toISOString()}`);
+    logger.debug(`[zync] pull:start stateKey=${stateKey} since=${lastUpdatedAtDate.toISOString()}`);
 
-    const serverData = (await api.list(lastPulledAt)) as SyncedRecord[];
+    const serverData = (await api.list(lastUpdatedAtDate)) as SyncedRecord[];
     if (!serverData?.length) return;
-
-    let newest = lastPulledAt;
 
     set((state: any) => {
         let pendingChanges = [...(state.syncState.pendingChanges as PendingChange[])];
@@ -26,7 +24,7 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
 
         for (const remote of serverData) {
             const remoteUpdated = new Date(remote.updated_at);
-            if (remoteUpdated > newest) newest = remoteUpdated;
+            if (remoteUpdated > lastUpdatedAtDate) lastUpdatedAtDate = remoteUpdated;
 
             // If a Remove is pending for this localId, skip merging/adding to avoid briefly resurrecting the item
             if (pendingRemovalById.has(remote.id)) {
@@ -111,9 +109,9 @@ export async function pull(set: any, get: any, stateKey: string, api: ApiFunctio
                 ...(state.syncState || {}),
                 pendingChanges,
                 conflicts: hasKeysOrUndefined(conflicts),
-                lastPulled: {
-                    ...(state.syncState.lastPulled || {}),
-                    [stateKey]: newest.toISOString(),
+                lastUpdatedAt: {
+                    ...(state.syncState.lastUpdatedAt || {}),
+                    [stateKey]: lastUpdatedAtDate.toISOString(),
                 },
             },
         };
