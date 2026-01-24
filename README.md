@@ -11,7 +11,7 @@ sqlite or the complexity of DB schemas and relationships, and it keeps your comp
 
 The tradeoff however is although Zustand can use IndexedDB, it will store all state in one key, and so load it all into the JS VM.
 
-When you need sqlite, or you know the client will need large amounts of data, [WatermelondDB](https://github.com/nozbe/WatermelonDB) is what you want. This will however require a backend that provides the PUSH/PULL endpoints for synchronising or perhaps modifying the frontend to redirect those requests to and from specific endpoints.
+When you need sqlite, or you know the client will need large amounts of data, [Dync](https://github.com/anfen/dync) is what you want.
 
 ## Benefits
 

@@ -102,6 +102,7 @@ export function tryAddToPendingChanges(pendingChanges: PendingChange[], stateKey
                 queueItem.action = SyncAction.Remove;
             } else if (hasChanges) {
                 // Never change the action here, it stays Create or Update and is removed when synced
+                // These queueItem fields may have been changed after http requests (e.g. returning server id) so ensure they aren't lost
                 queueItem.changes = { ...queueItem.changes, ...omittedChanges };
                 queueItem.after = { ...queueItem.after, ...omittedUpdatedItem };
             }
